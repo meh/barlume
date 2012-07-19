@@ -31,4 +31,6 @@ module FFI::Library
 
 		args.length == 1 ? args.first : args
 	end
+
+	module_function :raise_if_error
 end

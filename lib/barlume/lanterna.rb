@@ -121,6 +121,7 @@ end
 
 end
 
+require 'barlume/lanterna/utils'
 require 'barlume/lanterna/select'
 require 'barlume/lanterna/poll'
 require 'barlume/lanterna/epoll'
