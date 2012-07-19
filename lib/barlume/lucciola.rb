@@ -99,7 +99,7 @@ class Lucciola
 	end
 
 	def inspect
-		"#<#{self.class.name}: #{@io.inspect}>"
+		"#<#{self.class.name}: #{to_io.inspect}>"
 	end
 end
 
