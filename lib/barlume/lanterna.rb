@@ -69,8 +69,21 @@ class Lanterna
 	attr_reader :descriptors
 
 	def initialize
-		@breaker     = Breaker.new
-		@descriptors = []
+		@breaker       = Breaker.new
+		@descriptors   = []
+		@report_errors = false
+	end
+
+	def report_errors?
+		@report_errors
+	end
+
+	def report_errors!
+		@report_errors = true
+	end
+
+	def dont_report_errors!
+		@report_errors = false
 	end
 
 	def break

@@ -120,7 +120,11 @@ class Poll < Lanterna
 
 		@breaker.flush
 
-		[to(:read), to(:error)]
+		if report_errors?
+			[to(:read), to(:error)]
+		else
+			to :read
+		end
 	end
 
 	def writable (timeout = nil)
@@ -128,7 +132,11 @@ class Poll < Lanterna
 
 		@breaker.flush
 
-		[to(:write), to(:error)]
+		if report_errors?
+			[to(:write), to(:error)]
+		else
+			to :write
+		end
 	end
 
 	def set (what)

@@ -53,7 +53,11 @@ class Select < Lanterna
 			@breaker.flush
 		end
 
-		[readable || [], error || []]
+		if report_errors?
+			[readable || [], error || []]
+		else
+			readable || []
+		end
 	end
 
 	def writable (timeout = nil)
@@ -63,7 +67,11 @@ class Select < Lanterna
 			@breaker.flush
 		end
 
-		[writable || [], error || []]
+		if report_errors?
+			[writable || [], error || []]
+		else
+			writable || []
+		end
 	end
 
 private
