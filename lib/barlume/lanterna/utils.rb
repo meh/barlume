@@ -20,15 +20,17 @@
 require 'ffi'
 
 module FFI
-	def self.raise_if_error (*args)
-		if value = FFI.errno.nonzero?
-			Errno.constants.each {|name|
-				if Errno.const_get(name)::Errno == value
-					raise Errno.const_get(name).new
-				end
-			}
-		end
+	def self.raise
+		value = FFI.errno
 
-		args.length == 1 ? args.first : args
+		Errno.constants.each {|name|
+			if Errno.const_get(name)::Errno == value
+				raise Errno.const_get(name).new
+			end
+		}
+	end
+
+	def self.raise_if (what)
+		what ? what : FFI.raise
 	end
 end
