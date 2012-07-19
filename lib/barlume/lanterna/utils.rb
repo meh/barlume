@@ -25,7 +25,7 @@ module FFI
 
 		Errno.constants.each {|name|
 			if Errno.const_get(name)::Errno == value
-				raise Errno.const_get(name).new
+				Kernel.raise Errno.const_get(name).new
 			end
 		}
 	end
