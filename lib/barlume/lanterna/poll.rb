@@ -28,18 +28,18 @@ class Poll < Lanterna
 
 			ffi_lib FFI::Library::LIBC
 
-			attach_function :poll, [:pointer, :ulong, :int], :int
-
-			attach_function :malloc, [:size_t], :pointer
-			attach_function :realloc, [:pointer, :size_t], :pointer
-			attach_function :free, [:pointer], :void
-
 			class PollFD < FFI::Struct
 				layout \
 					:fd,      :int,
 					:events,  :short,
 					:revents, :short
 			end
+
+			attach_function :poll, [:pointer, :ulong, :int], :int
+
+			attach_function :malloc, [:size_t], :pointer
+			attach_function :realloc, [:pointer, :size_t], :pointer
+			attach_function :free, [:pointer], :void
 
 			POLLIN  = 0x001
 			POLLPRI = 0x002

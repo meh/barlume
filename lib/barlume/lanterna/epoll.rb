@@ -28,10 +28,6 @@ class Epoll < Lanterna
 
 			ffi_lib FFI::Library::LIBC
 
-			attach_function :malloc, [:size_t], :pointer
-			attach_function :realloc, [:pointer, :size_t], :pointer
-			attach_function :free, [:pointer], :void
-
 			class EpollData < FFI::Union
 				layout \
 					:ptr, :pointer,
@@ -40,8 +36,6 @@ class Epoll < Lanterna
 					:u64, :uint64
 			end
 
-			MAX = 4294967295
-
 			class EpollEvent < FFI::Struct
 				pack 1
 
@@ -49,6 +43,15 @@ class Epoll < Lanterna
 					:events, :uint32,
 					:data,   EpollData
 			end
+
+			Control = FFI::Enum.new([:add, 1, :del, :mod])
+
+			attach_function :epoll_create, [:int], :int
+			attach_function :epoll_create1, [:int], :int
+			attach_function :epoll_ctl, [:int, Control, :int, :pointer], :int
+			attach_function :epoll_wait, [:int, :pointer, :int, :int], :int
+
+			MAX = 4294967295
 
 			EPOLLIN  = 0x001
 			EPOLLPRI = 0x002
@@ -69,13 +72,6 @@ class Epoll < Lanterna
 
 			EPOLLONESHOT = 1 << 30
 			EPOLLET      = 1 << 31
-
-			Control = FFI::Enum.new([:add, 1, :del, :mod])
-
-			attach_function :epoll_create, [:int], :int
-			attach_function :epoll_create1, [:int], :int
-			attach_function :epoll_ctl, [:int, Control, :int, :pointer], :int
-			attach_function :epoll_wait, [:int, :pointer, :int, :int], :int
 		end
 
 		def self.supported?
@@ -85,6 +81,18 @@ class Epoll < Lanterna
 		def self.supported?
 			false
 		end
+	end
+
+	def self.new (*)
+		super.tap {|c|
+			ObjectSpace.define_finalizer c, finalizer(c.instance_variable_get :@fd)
+		}
+	end
+
+	def self.finalizer (fd)
+		proc {
+			IO.for_fd(fd).close
+		}
 	end
 
 	def initialize
@@ -98,10 +106,14 @@ class Epoll < Lanterna
 
 		C.epoll_ctl(@fd, :add, @breaker.to_i, p)
 
-		resize 4096
+		self.size = 4096
 	end
 
-	def resize (n)
+	def size
+		@events.size / C::EpollEvent.size
+	end
+
+	def size= (n)
 		@events = FFI::MemoryPointer.new C::EpollEvent.size, n
 	end
 
@@ -124,15 +136,11 @@ class Epoll < Lanterna
 	def available (timeout = nil)
 		set :both; epoll timeout
 
-		@breaker.flush
-
 		Available.new(to(:read), to(:write), to(:error))
 	end
 
 	def readable (timeout = nil)
 		set :read; epoll timeout
-
-		@breaker.flush
 
 		if report_errors?
 			[to(:read), to(:error)]
@@ -143,8 +151,6 @@ class Epoll < Lanterna
 
 	def writable (timeout = nil)
 		set :write; epoll timeout
-
-		@breaker.flush
 
 		if report_errors?
 			[to(:write), to(:error)]
@@ -192,7 +198,8 @@ class Epoll < Lanterna
 	end
 
 	def epoll (timeout = nil)
-		@length = C.epoll_wait(@fd, @events, @events.size / C::EpollEvent.size, timeout ? timeout * 1000 : -1)
+		@length = C.epoll_wait(@fd, @events, size, timeout ? timeout * 1000 : -1)
+		@breaker.flush
 	end
 end
 
