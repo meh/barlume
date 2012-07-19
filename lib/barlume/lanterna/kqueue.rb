@@ -240,7 +240,6 @@ class Kqueue < Lanterna; begin
 
 		@breaker.flush
 	end
-
 rescue Exception
 	def self.supported?
 		false
