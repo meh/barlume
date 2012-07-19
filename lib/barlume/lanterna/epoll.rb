@@ -189,7 +189,7 @@ class Epoll < Lanterna
 		0.upto(@length - 1) {|n|
 			p = C::EpollEvent.new(@events + (n * C::EpollEvent.size))
 
-			if p[:data][:u32] != C::MAX && p[:events] & events
+			if p[:data][:u32] != C::MAX && (p[:events] & events).nonzero?
 				result << descriptors[p[:data][:u32]]
 			end
 		}
