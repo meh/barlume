@@ -28,9 +28,17 @@ module FFI
 				Kernel.raise Errno.const_get(name).new
 			end
 		}
+	rescue Exception => e
+		e.backtrace.shift(3)
+
+		Kernel.raise e
 	end
 
 	def self.raise_if (what)
 		what ? what : FFI.raise
+	rescue Exception => e
+		e.backtrace.shift(1)
+
+		Kernel.raise e
 	end
 end
