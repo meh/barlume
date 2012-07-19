@@ -34,7 +34,7 @@ class Poll < Lanterna; begin
 				:revents, :short
 		end
 
-		attach_function :poll, [:pointer, :ulong, :int], :int
+		attach_function :poll, [:pointer, :ulong, :int], :int, :blocking => true
 
 		attach_function :malloc, [:size_t], :pointer
 		attach_function :realloc, [:pointer, :size_t], :pointer

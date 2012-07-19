@@ -48,7 +48,7 @@ class Epoll < Lanterna; begin
 		attach_function :epoll_create, [:int], :int
 		attach_function :epoll_create1, [:int], :int
 		attach_function :epoll_ctl, [:int, Control, :int, :pointer], :int
-		attach_function :epoll_wait, [:int, :pointer, :int, :int], :int
+		attach_function :epoll_wait, [:int, :pointer, :int, :int], :int, :blocking => true
 
 		MAX = 4294967295
 
