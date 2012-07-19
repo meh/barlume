@@ -42,6 +42,12 @@ class Lanterna
 
 			return select
 		end
+
+		def new (*)
+			raise 'unsupported platform' unless supported?
+
+			super
+		end
 	end
 
 	Available = Struct.new(:readable, :writable, :error)
