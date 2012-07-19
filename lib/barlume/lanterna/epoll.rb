@@ -199,6 +199,7 @@ class Epoll < Lanterna
 
 	def epoll (timeout = nil)
 		@length = C.epoll_wait(@fd, @events, size, timeout ? timeout * 1000 : -1)
+
 		@breaker.flush
 	end
 end

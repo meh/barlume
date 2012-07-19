@@ -110,15 +110,11 @@ class Poll < Lanterna
 	def available (timeout = nil)
 		set :both; poll timeout
 
-		@breaker.flush
-
 		Available.new(to(:read), to(:write), to(:error))
 	end
 
 	def readable (timeout = nil)
 		set :read; poll timeout
-
-		@breaker.flush
 
 		if report_errors?
 			[to(:read), to(:error)]
@@ -129,8 +125,6 @@ class Poll < Lanterna
 
 	def writable (timeout = nil)
 		set :write; poll timeout
-
-		@breaker.flush
 
 		if report_errors?
 			[to(:write), to(:error)]
@@ -177,6 +171,8 @@ class Poll < Lanterna
 
 	def poll (timeout = nil)
 		C.poll(@set, descriptors.length + 1, timeout ? timeout * 1000 : -1)
+
+		@breaker.flush
 	end
 end
 
