@@ -34,8 +34,16 @@ module FFI
 		Kernel.raise e
 	end
 
-	def self.raise_if (what)
+	def self.raise_unless (what)
 		what ? what : FFI.raise
+	rescue Exception => e
+		e.backtrace.shift(1)
+
+		Kernel.raise e
+	end
+
+	def self.raise_if (what)
+		what ? FFI.raise : what
 	rescue Exception => e
 		e.backtrace.shift(1)
 
