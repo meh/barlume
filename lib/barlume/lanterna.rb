@@ -74,6 +74,10 @@ class Lanterna
 		@report_errors = false
 	end
 
+	def name
+		self.class.name[/(?:::)?([^:]*)$/, 1].downcase.to_sym
+	end
+
 	def report_errors?
 		@report_errors
 	end
@@ -98,9 +102,19 @@ class Lanterna
 		}
 	end
 
+	def push (*args)
+		args.each { |a| add a }
+
+		self
+	end
+
+	alias << push
+
 	def remove (what)
 		@descriptors.delete(Lucciola.wrap(what))
 	end
+
+	alias delete remove
 end
 
 end

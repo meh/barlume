@@ -88,7 +88,7 @@ class Poll < Lanterna
 			pfd = C::PollFD.new(@set + descriptors.length * C::PollFD.size)
 			pfd[:fd] = l.to_i
 
-			@old = nil
+			@last = nil
 		}
 	end
 
@@ -103,7 +103,7 @@ class Poll < Lanterna
 			@set.autorelease = false
 			@set = FFI::AutoPointer.new(C.realloc(@set, (descriptors.length) * C::PollFD.size), C.method(:free))
 
-			super
+			super(l)
 		}
 	end
 
@@ -140,7 +140,7 @@ class Poll < Lanterna
 	end
 
 	def set (what)
-		return if @old == what
+		return if @last == what
 
 		events = case what
 			when :both  then C::POLLIN | C::POLLOUT
@@ -153,7 +153,7 @@ class Poll < Lanterna
 			pfd[:events] = events
 		}
 
-		@old = what
+		@last = what
 	end
 
 	def to (what)

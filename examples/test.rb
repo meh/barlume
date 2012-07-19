@@ -2,11 +2,13 @@
 require 'barlume'
 require 'socket'
 
-lantern = Barlume::Lanterna.poll
+lantern = Barlume::Lanterna.best
 server  = TCPServer.new 43215
 clients = []
 
-lantern.add(server)
+puts "Using #{lantern.name}..."
+
+lantern << server
 
 loop do
 	lantern.readable.each {|lucciola|
@@ -18,7 +20,7 @@ loop do
 			puts lucciola.readline rescue nil
 
 			if lucciola.closed?
-				clients.remove(lantern.remove(lucciola))
+				clients.delete(lantern.remove(lucciola))
 			end
 		end
 	}
