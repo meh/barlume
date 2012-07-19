@@ -23,11 +23,7 @@ module FFI
 	def self.raise
 		value = FFI.errno
 
-		Errno.constants.each {|name|
-			if Errno.const_get(name)::Errno == value
-				Kernel.raise Errno.const_get(name).new
-			end
-		}
+		Kernel.raise Errno.constants[FFI.errno].new
 	rescue Exception => e
 		e.backtrace.shift(3)
 
