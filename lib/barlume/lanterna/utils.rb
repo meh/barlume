@@ -19,9 +19,9 @@
 
 require 'ffi'
 
-module FFI::Library
-	def raise_if_error (*args)
-		if value = errno.nonzero?
+module FFI
+	def self.raise_if_error (*args)
+		if value = FFI.errno.nonzero?
 			Errno.constants.each {|name|
 				if Errno.const_get(name)::Errno == value
 					raise Errno.const_get(name).new
@@ -31,6 +31,4 @@ module FFI::Library
 
 		args.length == 1 ? args.first : args
 	end
-
-	module_function :raise_if_error
 end
