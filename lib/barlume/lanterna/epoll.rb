@@ -21,66 +21,60 @@ require 'ffi'
 
 module Barlume; class Lanterna
 
-class Epoll < Lanterna
-	begin
-		module C
-			extend FFI::Library
+class Epoll < Lanterna; begin
+	module C
+		extend FFI::Library
 
-			ffi_lib FFI::Library::LIBC
+		ffi_lib FFI::Library::LIBC
 
-			class EpollData < FFI::Union
-				layout \
-					:ptr, :pointer,
-					:fd,  :int,
-					:u32, :uint32,
-					:u64, :uint64
-			end
-
-			class EpollEvent < FFI::Struct
-				pack 1
-
-				layout \
-					:events, :uint32,
-					:data,   EpollData
-			end
-
-			Control = FFI::Enum.new([:add, 1, :del, :mod])
-
-			attach_function :epoll_create, [:int], :int
-			attach_function :epoll_create1, [:int], :int
-			attach_function :epoll_ctl, [:int, Control, :int, :pointer], :int
-			attach_function :epoll_wait, [:int, :pointer, :int, :int], :int
-
-			MAX = 4294967295
-
-			EPOLLIN  = 0x001
-			EPOLLPRI = 0x002
-			EPOLLOUT = 0x004
-
-			EPOLLERR  = 0x008
-			EPOLLHUP  = 0x010
-			EPOLLNVAL = 0x020
-
-			EPOLLRDNORM = 0x040
-			EPOLLRDBAND = 0x080
-			EPOLLWRNORM = 0x100
-			EPOLLWRBAND = 0x200
-
-			EPOLLMSG    = 0x0400
-			EPOLLREMOVE = 0x1000
-			EPOLLRDHUP  = 0x2000
-
-			EPOLLONESHOT = 1 << 30
-			EPOLLET      = 1 << 31
+		class EpollData < FFI::Union
+			layout \
+				:ptr, :pointer,
+				:fd,  :int,
+				:u32, :uint32,
+				:u64, :uint64
 		end
 
-		def self.supported?
-			true
+		class EpollEvent < FFI::Struct
+			pack 1
+
+			layout \
+				:events, :uint32,
+				:data,   EpollData
 		end
-	rescue Exception
-		def self.supported?
-			false
-		end
+
+		Control = FFI::Enum.new([:add, 1, :del, :mod])
+
+		attach_function :epoll_create, [:int], :int
+		attach_function :epoll_create1, [:int], :int
+		attach_function :epoll_ctl, [:int, Control, :int, :pointer], :int
+		attach_function :epoll_wait, [:int, :pointer, :int, :int], :int
+
+		MAX = 4294967295
+
+		EPOLLIN  = 0x001
+		EPOLLPRI = 0x002
+		EPOLLOUT = 0x004
+
+		EPOLLERR  = 0x008
+		EPOLLHUP  = 0x010
+		EPOLLNVAL = 0x020
+
+		EPOLLRDNORM = 0x040
+		EPOLLRDBAND = 0x080
+		EPOLLWRNORM = 0x100
+		EPOLLWRBAND = 0x200
+
+		EPOLLMSG    = 0x0400
+		EPOLLREMOVE = 0x1000
+		EPOLLRDHUP  = 0x2000
+
+		EPOLLONESHOT = 1 << 30
+		EPOLLET      = 1 << 31
+	end
+
+	def self.supported?
+		true
 	end
 
 	def self.new (*)
@@ -98,13 +92,13 @@ class Epoll < Lanterna
 	def initialize
 		super
 
-		@fd = C.epoll_create1(0)
+		FFI.raise_if((@fd = C.epoll_create1(0)) < 0)
 
 		p = C::EpollEvent.new
 		p[:events] = C::EPOLLIN
 		p[:data][:u32] = C::MAX
 
-		C.epoll_ctl(@fd, :add, @breaker.to_i, p)
+		FFI.raise_if(C.epoll_ctl(@fd, :add, @breaker.to_i, p) < 0)
 
 		self.size = 4096
 	end
@@ -119,7 +113,7 @@ class Epoll < Lanterna
 
 	def add (what)
 		super.tap {|l|
-			C.epoll_ctl(@fd, :add, l.to_i, C::EpollEvent.new)
+			FFI.raise_if(C.epoll_ctl(@fd, :add, l.to_i, C::EpollEvent.new) < 0)
 
 			@last = nil
 		}
@@ -127,7 +121,9 @@ class Epoll < Lanterna
 
 	def remove (what)
 		super.tap {|l|
-			C.epoll_ctl(@fd, :del, l.to_i, nil)
+			begin
+				FFI.raise_if(C.epoll_ctl(@fd, :del, l.to_i, nil) < 0)
+			rescue Errno::ENOENT; end
 
 			@last = nil
 		}
@@ -172,7 +168,7 @@ class Epoll < Lanterna
 		descriptors.each_with_index {|descriptor, index|
 			p[:data][:u32] = index
 
-			C.epoll_ctl(@fd, :mod, descriptor.to_i, p)
+			FFI.raise_if(C.epoll_ctl(@fd, :mod, descriptor.to_i, p) < 0)
 		}
 
 		@last = what
@@ -198,10 +194,14 @@ class Epoll < Lanterna
 	end
 
 	def epoll (timeout = nil)
-		@length = C.epoll_wait(@fd, @events, size, timeout ? timeout * 1000 : -1)
+		FFI.raise_if((@length = C.epoll_wait(@fd, @events, size, timeout ? timeout * 1000 : -1)) < 0)
 
 		@breaker.flush
 	end
-end
+rescue Exception
+	def self.supported?
+		false
+	end
+end; end
 
 end; end

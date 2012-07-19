@@ -19,79 +19,73 @@
 
 module Barlume; class Lanterna
 
-class Kqueue < Lanterna
-	begin
-		module C
-			extend FFI::Library
+class Kqueue < Lanterna; begin
+	module C
+		extend FFI::Library
 
-			ffi_lib FFI::Library::LIBC
+		ffi_lib FFI::Library::LIBC
 
-			class Kevent < FFI::Struct
-				layout \
-					:ident,  :intptr_t,
-					:filter, :short,
-					:flags,  :ushort,
-					:fflags, :uint,
-					:data,   :long,
-					:udata,  :pointer
-			end
-
-			class TimeSpec < FFI::Struct
-				layout \
-					:tv_sec,  :time_t,
-					:tv_nsec, :int
-			end
-
-			attach_function :kqueue, [], :int
-			attach_function :kevent, [:int, :pointer, :int, :pointer, :int, :pointer], :int
-
-			MAX = 4294967295
-
-			EVFILT_READ     =  -1
-			EVFILT_WRITE    =  -2
-			EVFILT_AIO      =  -3
-			EVFILT_VNODE    =  -4
-			EVFILT_PROC     =  -5
-			EVFILT_SIGNAL   =  -6
-			EVFILT_TIMER    =  -7
-			EVFILT_NETDEV   =  -8
-			EVFILT_FS       =  -9
-			EVFILT_LIO      = -10
-			EVFILT_USER     = -11
-			EVFILT_SYSCOUNT =  11
-
-			EV_ADD      = 0x0001
-			EV_DELETE   = 0x0002
-			EV_ENABLE   = 0x0004
-			EV_DISABLE  = 0x0008
-			EV_ONESHOT  = 0x0010
-			EV_CLEAR    = 0x0020
-			EV_RECEIPT  = 0x0040
-			EV_DISPATCH = 0x0080
-			EV_SYSFLAGS = 0xF000
-			EV_FLAG1    = 0x2000
-			EV_EOF      = 0x8000
-			EV_ERROR    = 0x4000
-
-			def self.EV_SET (event, a, b, c, d, e, f)
-				event[:ident]  = a
-				event[:filter] = b
-				event[:flags]  = c
-				event[:fflags] = d
-				event[:data]   = e
-				event[:udata]  = f
-
-				event
-			end
+		class Kevent < FFI::Struct
+			layout \
+				:ident,  :intptr_t,
+				:filter, :short,
+				:flags,  :ushort,
+				:fflags, :uint,
+				:data,   :long,
+				:udata,  :pointer
 		end
 
-		def self.supported?
-			true
+		class TimeSpec < FFI::Struct
+			layout \
+				:tv_sec,  :time_t,
+				:tv_nsec, :int
 		end
-	rescue Exception
-		def self.supported?
-			false
+
+		attach_function :kqueue, [], :int
+		attach_function :kevent, [:int, :pointer, :int, :pointer, :int, :pointer], :int
+
+		MAX = 4294967295
+
+		EVFILT_READ     =  -1
+		EVFILT_WRITE    =  -2
+		EVFILT_AIO      =  -3
+		EVFILT_VNODE    =  -4
+		EVFILT_PROC     =  -5
+		EVFILT_SIGNAL   =  -6
+		EVFILT_TIMER    =  -7
+		EVFILT_NETDEV   =  -8
+		EVFILT_FS       =  -9
+		EVFILT_LIO      = -10
+		EVFILT_USER     = -11
+		EVFILT_SYSCOUNT =  11
+
+		EV_ADD      = 0x0001
+		EV_DELETE   = 0x0002
+		EV_ENABLE   = 0x0004
+		EV_DISABLE  = 0x0008
+		EV_ONESHOT  = 0x0010
+		EV_CLEAR    = 0x0020
+		EV_RECEIPT  = 0x0040
+		EV_DISPATCH = 0x0080
+		EV_SYSFLAGS = 0xF000
+		EV_FLAG1    = 0x2000
+		EV_EOF      = 0x8000
+		EV_ERROR    = 0x4000
+
+		def self.EV_SET (event, a, b, c, d, e, f)
+			event[:ident]  = a
+			event[:filter] = b
+			event[:flags]  = c
+			event[:fflags] = d
+			event[:data]   = e
+			event[:udata]  = f
+
+			event
 		end
+	end
+
+	def self.supported?
+		true
 	end
 
 	def self.new (*)
@@ -246,6 +240,11 @@ class Kqueue < Lanterna
 
 		@breaker.flush
 	end
-end
+
+rescue Exception
+	def self.supported?
+		false
+	end
+end; end
 
 end; end

@@ -21,51 +21,45 @@ require 'ffi'
 
 module Barlume; class Lanterna
 
-class Poll < Lanterna
-	begin
-		module C
-			extend FFI::Library
+class Poll < Lanterna; begin
+	module C
+		extend FFI::Library
 
-			ffi_lib FFI::Library::LIBC
+		ffi_lib FFI::Library::LIBC
 
-			class PollFD < FFI::Struct
-				layout \
-					:fd,      :int,
-					:events,  :short,
-					:revents, :short
-			end
-
-			attach_function :poll, [:pointer, :ulong, :int], :int
-
-			attach_function :malloc, [:size_t], :pointer
-			attach_function :realloc, [:pointer, :size_t], :pointer
-			attach_function :free, [:pointer], :void
-
-			POLLIN  = 0x001
-			POLLPRI = 0x002
-			POLLOUT = 0x004
-
-			POLLERR  = 0x008
-			POLLHUP  = 0x010
-			POLLNVAL = 0x020
-
-			POLLRDNORM = 0x040
-			POLLRDBAND = 0x080
-			POLLWRNORM = 0x100
-			POLLWRBAND = 0x200
-
-			POLLMSG    = 0x0400
-			POLLREMOVE = 0x1000
-			POLLRDHUP  = 0x2000
+		class PollFD < FFI::Struct
+			layout \
+				:fd,      :int,
+				:events,  :short,
+				:revents, :short
 		end
 
-		def self.supported?
-			true
-		end
-	rescue Exception
-		def self.supported?
-			false
-		end
+		attach_function :poll, [:pointer, :ulong, :int], :int
+
+		attach_function :malloc, [:size_t], :pointer
+		attach_function :realloc, [:pointer, :size_t], :pointer
+		attach_function :free, [:pointer], :void
+
+		POLLIN  = 0x001
+		POLLPRI = 0x002
+		POLLOUT = 0x004
+
+		POLLERR  = 0x008
+		POLLHUP  = 0x010
+		POLLNVAL = 0x020
+
+		POLLRDNORM = 0x040
+		POLLRDBAND = 0x080
+		POLLWRNORM = 0x100
+		POLLWRBAND = 0x200
+
+		POLLMSG    = 0x0400
+		POLLREMOVE = 0x1000
+		POLLRDHUP  = 0x2000
+	end
+
+	def self.supported?
+		true
 	end
 
 	def initialize
@@ -170,10 +164,14 @@ class Poll < Lanterna
 	end
 
 	def poll (timeout = nil)
-		C.poll(@set, descriptors.length + 1, timeout ? timeout * 1000 : -1)
+		FFI.raise_if(C.poll(@set, descriptors.length + 1, timeout ? timeout * 1000 : -1) < 0)
 
 		@breaker.flush
 	end
-end
+rescue Exception
+	def self.supported?
+		false
+	end
+end; end
 
 end; end
