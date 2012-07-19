@@ -22,24 +22,26 @@ require 'barlume/lucciola'
 module Barlume
 
 class Lanterna
-	%w[select poll epoll kqueue].each {|name|
-		define_singleton_method "#{name}?" do
-			const_get(name.capitalize).supported?
+	class << self
+		%w[select poll epoll kqueue].each {|name|
+			define_method "#{name}?" do
+				const_get(name.capitalize).supported?
+			end
+
+			define_method name do
+				const_get(name.capitalize).new
+			end
+		}
+
+		def best
+			return kqueue if kqueue?
+
+			return epoll if epoll?
+
+			return poll if poll?
+
+			return select
 		end
-
-		define_singleton_method name do
-			const_get(name.capitalize).new
-		end
-	}
-
-	def self.best
-		return kqueue if kqueue?
-
-		return epoll if epoll?
-
-		return poll if poll?
-
-		return select
 	end
 
 	Available = Struct.new(:readable, :writable, :error)
