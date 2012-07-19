@@ -98,7 +98,7 @@ class Poll < Lanterna
 			offset  = (index + 1) * C::PollFD.size
 			pointer = @set + offset
 
-			pointer.write_bytes(index * C::PollFD.size, pointer.read_bytes(offset, (descriptors.length - index) * C::PollFD.size))
+			pointer.write_bytes((pointer + C::PollFD.size).read_bytes((descriptors.length - index) * C::PollFD.size))
 
 			@set.autorelease = false
 			@set = FFI::AutoPointer.new(C.realloc(@set, (descriptors.length) * C::PollFD.size), C.method(:free))

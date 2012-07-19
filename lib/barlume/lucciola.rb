@@ -21,7 +21,7 @@ require 'fcntl'
 
 module Barlume
 
-class Lucciola < BasicObject
+class Lucciola
 	def self.wrap (what)
 		return what if what.is_a? self
 
@@ -32,7 +32,7 @@ class Lucciola < BasicObject
 		@io = what.is_a?(::Integer) ? ::IO.for_fd(what) : what
 
 		unless @io.respond_to? :to_i
-			raise ArgumentErrror, 'the object must respond to to_i'
+			raise ArgumentError, 'the object must respond to to_i'
 		end
 	end
 
@@ -42,11 +42,9 @@ class Lucciola < BasicObject
 
 	def method_missing (id, *args, &block)
 		if @io.respond_to? id
-			puts 'wat'
 			begin
 				return @io.__send__ id, *args, &block
-			rescue ::EOFError
-				puts 'lol'
+			rescue EOFError
 				@closed = true
 
 				raise
@@ -71,11 +69,11 @@ class Lucciola < BasicObject
 	end
 
 	def closed?
-		@closed || @io.respond_to?(:closed) ? @io.closed? : false
+		@closed or @io.respond_to?(:closed?) ? @io.closed? : false
 	end
 
 	def nonblocking?
-		(@io.fcntl(::Fcntl::F_GETFL, 0) & ::Fcntl::O_NONBLOCK).nonzero?
+		(@io.fcntl(Fcntl::F_GETFL, 0) & Fcntl::O_NONBLOCK).nonzero?
 	end
 
 	alias asynchronous? nonblocking?
@@ -85,11 +83,11 @@ class Lucciola < BasicObject
 	end
 
 	def blocking!
-		@io.fcntl(::Fcntl::F_SETFL, @io.fcntl(::Fcntl::F_GETFL, 0) | ::Fcntl::O_NONBLOCK)
+		@io.fcntl(Fcntl::F_SETFL, @io.fcntl(Fcntl::F_GETFL, 0) | Fcntl::O_NONBLOCK)
 	end
 
 	def nonblocking!
-		@io.fcntl(::Fcntl::F_SETFL, @io.fcntl(::Fcntl::F_GETFL, 0) & ~::Fcntl::O_NONBLOCK)
+		@io.fcntl(Fcntl::F_SETFL, @io.fcntl(Fcntl::F_GETFL, 0) & ~Fcntl::O_NONBLOCK)
 	end
 
 	def to_io
@@ -98,6 +96,10 @@ class Lucciola < BasicObject
 
 	def to_i
 		@io.to_i
+	end
+
+	def inspect
+		"#<#{self.class.name}: #{@io.inspect}>"
 	end
 end
 
