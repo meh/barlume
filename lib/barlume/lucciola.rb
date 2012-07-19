@@ -34,6 +34,8 @@ class Lucciola
 		unless @io.respond_to? :to_i
 			raise ArgumentError, 'the object must respond to to_i'
 		end
+
+		@fd = @io.to_i
 	end
 
 	def respond_to_missing? (*args)
@@ -95,7 +97,7 @@ class Lucciola
 	end
 
 	def to_i
-		@io.to_i
+		@fd
 	end
 
 	def inspect
