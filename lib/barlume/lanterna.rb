@@ -92,14 +92,20 @@ class Lanterna
 
 	def report_errors!
 		@report_errors = true
+
+		self
 	end
 
 	def dont_report_errors!
 		@report_errors = false
+
+		self
 	end
 
 	def break
 		@breaker.break
+
+		self
 	end
 
 	def add (what)
