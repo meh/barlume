@@ -23,7 +23,7 @@ module FFI
 	def self.raise
 		value = FFI.errno
 
-		Kernel.raise Errno.constants[FFI.errno].new
+		Kernel.raise Errno.const_get(Errno.constants[FFI.errno]).new
 	rescue Exception => e
 		e.backtrace.shift(3)
 
