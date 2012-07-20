@@ -17,8 +17,6 @@
 # along with barlume. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-require 'ffi'
-
 module Barlume; class Lanterna
 
 class Poll < Lanterna; begin
