@@ -84,13 +84,23 @@ class Lucciola
 		!nonblocking?
 	end
 
+	alias synchronous? blocking?
+
 	def blocking!
 		@io.fcntl(Fcntl::F_SETFL, @io.fcntl(Fcntl::F_GETFL, 0) | Fcntl::O_NONBLOCK)
+
+		self
 	end
+
+	alias sychronous! blocking!
 
 	def nonblocking!
 		@io.fcntl(Fcntl::F_SETFL, @io.fcntl(Fcntl::F_GETFL, 0) & ~Fcntl::O_NONBLOCK)
+
+		self
 	end
+
+	alias asynchronous! nonblocking!
 
 	def to_io
 		@io
