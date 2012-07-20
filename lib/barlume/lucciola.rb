@@ -18,6 +18,7 @@
 #++
 
 require 'fcntl'
+require 'socket'
 
 module Barlume
 
@@ -101,6 +102,48 @@ class Lucciola
 	end
 
 	alias asynchronous! nonblocking!
+
+	def no_delay?
+		raise 'no_delay is TCP only' unless @io.is_a? TCPSocket
+
+		@io.getsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY).nonzero?
+	end
+
+	def delay?
+		!no_delay?
+	end
+
+	def no_delay!
+		raise 'no_delay is TCP only' unless @io.is_a? TCPSocket
+
+		@io.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1)
+
+		self
+	end
+
+	def delay!
+		raise 'no_delay is TCP only' unless @io.is_a? TCPSocket
+
+		@io.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 0)
+
+		self
+	end
+
+	def transaction
+		unless to_io.is_a?(TCPSocket) && Socket.const_defined?(:TCP_CORK)
+			raise 'transaction is not supported on this kind of IO'
+		end
+
+		begin
+			@io.setsockopt Socket::IPPROTO_TCP, Socket::TCP_CORK, 1
+
+			yield self
+		ensure
+			@io.setsockopt Socket::IPPROTO_TCP, Socket::TCP_CORK, 0
+		end
+
+		self
+	end
 
 	def to_io
 		@io
