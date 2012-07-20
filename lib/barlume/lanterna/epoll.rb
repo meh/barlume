@@ -109,6 +109,24 @@ class Epoll < Lanterna; begin
 		@events = FFI::MemoryPointer.new C::EpollEvent.size, n
 	end
 
+	def edge_triggered?
+		@edge
+	end
+
+	def edge_triggered!
+		@edge = true
+		@last = nil
+
+		self
+	end
+
+	def level_triggered!
+		@edge = false
+		@last = nil
+
+		self
+	end
+
 	def add (what)
 		super.tap {|l|
 			FFI.raise_if(C.epoll_ctl(@fd, :add, l.to_i, C::EpollEvent.new) < 0)
@@ -162,6 +180,8 @@ class Epoll < Lanterna; begin
 			when :read  then C::EPOLLIN
 			when :write then C::EPOLLOUT
 		end
+
+		p[:events] |= C::EPOLLET if edge_triggered?
 
 		descriptors.each_with_index {|descriptor, index|
 			p[:data][:u32] = index
