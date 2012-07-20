@@ -120,6 +120,24 @@ class Kqueue < Lanterna; begin
 		@events = FFI::MemoryPointer.new C::Kevent.size, n
 	end
 
+	def edge_triggered?
+		@edge
+	end
+
+	def edge_triggered!
+		@edge = true
+		@last = nil
+
+		self
+	end
+
+	def level_triggered!
+		@edge = false
+		@last = nil
+
+		self
+	end
+
 	def add (*)
 		super.tap {
 			@last = nil
@@ -175,22 +193,22 @@ class Kqueue < Lanterna; begin
 			descriptors.each_with_index {|descriptor, index|
 				index = FFI::Pointer.new(index)
 
-				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_ENABLE, 0, 0, index), 1, nil, 0, nil) < 0)
+				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
 				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_DISABLE, 0, 0, index), 1, nil, 0, nil) < 0)
 			}
 		elsif what == :write
 			descriptors.each_with_index {|descriptor, index|
 				index = FFI::Pointer.new(index)
 
-				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_ENABLE, 0, 0, index), 1, nil, 0, nil) < 0)
+				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
 				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_DISABLE, 0, 0, index), 1, nil, 0, nil) < 0)
 			}
 		else
 			descriptors.each_with_index {|descriptor, index|
 				index = FFI::Pointer.new(index)
 
-				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_ENABLE, 0, 0, index), 1, nil, 0, nil) < 0)
-				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_ENABLE, 0, 0, index), 1, nil, 0, nil) < 0)
+				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
+				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
 			}
 		end
 
