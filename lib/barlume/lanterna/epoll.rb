@@ -109,9 +109,8 @@ class Epoll < Lanterna; begin
 		@events = FFI::MemoryPointer.new C::EpollEvent.size, n
 	end
 
-	def edge_triggered?
-		@edge
-	end
+	def edge_triggered?;   @edge; end
+	def level_triggered?; !@edge; end
 
 	def edge_triggered!
 		@edge = true

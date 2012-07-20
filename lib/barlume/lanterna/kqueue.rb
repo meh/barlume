@@ -120,9 +120,8 @@ class Kqueue < Lanterna; begin
 		@events = FFI::MemoryPointer.new C::Kevent.size, n
 	end
 
-	def edge_triggered?
-		@edge
-	end
+	def edge_triggered?;   @edge; end
+	def level_triggered?; !@edge; end
 
 	def edge_triggered!
 		@edge = true

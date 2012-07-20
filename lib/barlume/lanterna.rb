@@ -43,10 +43,10 @@ class Lanterna
 			return select
 		end
 
-		def best_with_edge_triggering
-			return kqueue if kqueue?
+		def best_edge_triggered
+			return kqueue.edge_triggered! if kqueue?
 
-			return epoll if epoll?
+			return epoll.edge_triggered! if epoll?
 
 			raise 'edge triggering is not supported on this platform'
 		end
