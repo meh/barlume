@@ -75,9 +75,9 @@ class Poll < Lanterna; begin
 			next unless l
 
 			@set.autorelease = false
-			@set = FFI::AutoPointer.new(C.realloc(@set, (descriptors.length + 1) * C::PollFD.size), C.method(:free))
+			@set = FFI::AutoPointer.new(C.realloc(@set, (@descriptors.length + 1) * C::PollFD.size), C.method(:free))
 
-			pfd = C::PollFD.new(@set + descriptors.length * C::PollFD.size)
+			pfd = C::PollFD.new(@set + @descriptors.length * C::PollFD.size)
 			pfd[:fd] = l.to_i
 
 			@last = nil
@@ -86,14 +86,14 @@ class Poll < Lanterna; begin
 
 	def remove (what)
 		Lucciola.wrap(what).tap {|l|
-			index   = descriptors.index(l)
+			index   = @descriptors.index(l)
 			offset  = (index + 1) * C::PollFD.size
 			pointer = @set + offset
 
-			pointer.write_bytes((pointer + C::PollFD.size).read_bytes((descriptors.length - index) * C::PollFD.size))
+			pointer.write_bytes((pointer + C::PollFD.size).read_bytes((@descriptors.length - index) * C::PollFD.size))
 
 			@set.autorelease = false
-			@set = FFI::AutoPointer.new(C.realloc(@set, (descriptors.length) * C::PollFD.size), C.method(:free))
+			@set = FFI::AutoPointer.new(C.realloc(@set, (@descriptors.length) * C::PollFD.size), C.method(:free))
 
 			super(l)
 		}
@@ -134,7 +134,7 @@ class Poll < Lanterna; begin
 			when :write then C::POLLOUT
 		end
 
-		1.upto(descriptors.length) {|n|
+		1.upto(@descriptors.length) {|n|
 			pfd = C::PollFD.new(@set + (n * C::PollFD.size))
 			pfd[:events] = events
 		}
@@ -150,11 +150,11 @@ class Poll < Lanterna; begin
 			when :error then C::POLLERR | C::POLLHUP
 		end
 
-		1.upto(descriptors.length) {|n|
+		1.upto(@descriptors.length) {|n|
 			pfd = C::PollFD.new(@set + (n * C::PollFD.size))
 
 			if (pfd[:revents] & events).nonzero?
-				result << descriptors[n - 1]
+				result << @descriptors[n - 1]
 			end
 		}
 
@@ -162,7 +162,7 @@ class Poll < Lanterna; begin
 	end
 
 	def poll (timeout = nil)
-		FFI.raise_if(C.poll(@set, descriptors.length + 1, timeout ? timeout * 1000 : -1) < 0)
+		FFI.raise_if(C.poll(@set, @descriptors.length + 1, timeout ? timeout * 1000 : -1) < 0)
 
 		@breaker.flush
 	end

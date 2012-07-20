@@ -189,21 +189,21 @@ class Kqueue < Lanterna; begin
 		ev = C::Kevent.new
 
 		if what == :read
-			descriptors.each_with_index {|descriptor, index|
+			each_with_index {|descriptor, index|
 				index = FFI::Pointer.new(index)
 
 				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
 				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_DISABLE, 0, 0, index), 1, nil, 0, nil) < 0)
 			}
 		elsif what == :write
-			descriptors.each_with_index {|descriptor, index|
+			each_with_index {|descriptor, index|
 				index = FFI::Pointer.new(index)
 
 				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
 				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_DISABLE, 0, 0, index), 1, nil, 0, nil) < 0)
 			}
 		else
-			descriptors.each_with_index {|descriptor, index|
+			each_with_index {|descriptor, index|
 				index = FFI::Pointer.new(index)
 
 				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
@@ -223,7 +223,7 @@ class Kqueue < Lanterna; begin
 				index = p[:udata].address
 
 				if p != index && (p[:flags] & C::EV_ERROR).nonzero?
-					result << descriptors[index]
+					result << @descriptors[index]
 				end
 			}
 		else
@@ -237,7 +237,7 @@ class Kqueue < Lanterna; begin
 				index = p[:udata].address
 
 				if index != C::MAX && p[:filter] == filter
-					result << descriptors[index]
+					result << @descriptors[index]
 				end
 			}
 		end

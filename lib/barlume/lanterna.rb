@@ -82,7 +82,7 @@ class Lanterna
 		end
 	end
 
-	attr_reader :descriptors
+	include Enumerable
 
 	def initialize
 		@breaker       = Breaker.new
@@ -92,6 +92,14 @@ class Lanterna
 
 	def name
 		self.class.name[/(?:::)?([^:]*)$/, 1].downcase.to_sym
+	end
+
+	def each (&block)
+		return to_enum unless block
+
+		@descriptors.each(&block)
+
+		self
 	end
 
 	def report_errors?

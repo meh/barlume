@@ -182,7 +182,7 @@ class Epoll < Lanterna; begin
 
 		p[:events] |= C::EPOLLET if edge_triggered?
 
-		descriptors.each_with_index {|descriptor, index|
+		each_with_index {|descriptor, index|
 			p[:data][:u32] = index
 
 			FFI.raise_if(C.epoll_ctl(@fd, :mod, descriptor.to_i, p) < 0)
@@ -203,7 +203,7 @@ class Epoll < Lanterna; begin
 			p = C::EpollEvent.new(@events + (n * C::EpollEvent.size))
 
 			if p[:data][:u32] != C::MAX && (p[:events] & events).nonzero?
-				result << descriptors[p[:data][:u32]]
+				result << @descriptors[p[:data][:u32]]
 			end
 		}
 

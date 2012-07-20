@@ -37,7 +37,7 @@ class Select < Lanterna
 	end
 
 	def available (timeout = nil)
-		readable, writable, error = IO.select(descriptors_with_breaker, descriptors, descriptors, timeout)
+		readable, writable, error = IO.select(descriptors_with_breaker, @descriptors, @descriptors, timeout)
 
 		if readable && readable.delete(@breaker.to_io)
 			@breaker.flush
@@ -47,7 +47,7 @@ class Select < Lanterna
 	end
 
 	def readable (timeout = nil)
-		readable, writable, error = IO.select(descriptors_with_breaker, nil, descriptors, timeout)
+		readable, writable, error = IO.select(descriptors_with_breaker, nil, @descriptors, timeout)
 
 		if readable && readable.delete(@breaker.to_io)
 			@breaker.flush
@@ -61,7 +61,7 @@ class Select < Lanterna
 	end
 
 	def writable (timeout = nil)
-		readable, writable, error = IO.select([@breaker], descriptors, descriptors, timeout)
+		readable, writable, error = IO.select([@breaker], @descriptors, @descriptors, timeout)
 
 		if readable && readable.delete(@breaker.to_io)
 			@breaker.flush
@@ -76,7 +76,7 @@ class Select < Lanterna
 
 private
 	def descriptors_with_breaker
-		@descriptors_with_breaker ||= [@breaker.to_io] + descriptors
+		@descriptors_with_breaker ||= [@breaker.to_io] + @descriptors
 	end
 end
 
