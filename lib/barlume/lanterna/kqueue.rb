@@ -186,22 +186,33 @@ class Kqueue < Lanterna; begin
 			each_with_index {|descriptor, index|
 				index = FFI::Pointer.new(index)
 
-				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
+				unless @last == :both
+					FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
+				end
+
 				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_DISABLE, 0, 0, index), 1, nil, 0, nil) < 0)
 			}
 		elsif what == :write
 			each_with_index {|descriptor, index|
 				index = FFI::Pointer.new(index)
 
-				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
+				unless @last == :both
+					FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
+				end
+
 				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_DISABLE, 0, 0, index), 1, nil, 0, nil) < 0)
 			}
 		else
 			each_with_index {|descriptor, index|
 				index = FFI::Pointer.new(index)
 
-				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
-				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
+				unless @last == :write
+					FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
+				end
+
+				unless @last == :read
+					FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
+				end
 			}
 		end
 
