@@ -19,17 +19,27 @@
 
 require 'barlume/lucciola'
 
+require 'barlume/lanterna/utils'
+require 'barlume/lanterna/select'
+require 'barlume/lanterna/poll'
+require 'barlume/lanterna/epoll'
+require 'barlume/lanterna/kqueue'
+require 'barlume/lanterna/port'
+require 'barlume/lanterna/dpoll'
+
 module Barlume
 
 class Lanterna
 	class << self
-		%w[select poll epoll kqueue port].each {|name|
+		%w[select poll epoll kqueue port dpoll].each {|name|
+			klass = Lanterna.const_get(constants.find { |c| c.downcase.to_s == name })
+
 			define_method "#{name}?" do
-				const_get(name.capitalize).supported?
+				klass.supported?
 			end
 
 			define_method name do
-				const_get(name.capitalize).new
+				klass.new
 			end
 		}
 
@@ -39,6 +49,8 @@ class Lanterna
 			return epoll if epoll?
 			
 			return port if port?
+
+			return dpoll if dpoll? && RUBY_PLATFORM =~ /solaris/i
 
 			return poll if poll?
 
@@ -156,10 +168,3 @@ class Lanterna
 end
 
 end
-
-require 'barlume/lanterna/utils'
-require 'barlume/lanterna/select'
-require 'barlume/lanterna/poll'
-require 'barlume/lanterna/epoll'
-require 'barlume/lanterna/kqueue'
-require 'barlume/lanterna/port'
