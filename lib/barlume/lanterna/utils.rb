@@ -20,10 +20,12 @@
 require 'ffi'
 
 module FFI
-	def self.raise
-		value = FFI.errno
+	def self.errno_exception
+		Errno.const_get(Errno.constants[FFI.errno]).new
+	end
 
-		Kernel.raise Errno.const_get(Errno.constants[FFI.errno]).new
+	def self.raise
+		Kernel.raise errno_exception
 	rescue Exception => e
 		e.backtrace.shift(3)
 
