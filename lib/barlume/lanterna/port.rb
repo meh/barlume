@@ -25,7 +25,7 @@ class Port < Lanterna; begin
 
 		ffi_lib FFI::Library::LIBC
 
-		class PortEvent < FFI::Union
+		class PortEvent < FFI::Struct
 			layout \
 				:events, :int,
 				:source, :ushort,
@@ -96,10 +96,11 @@ class Port < Lanterna; begin
 	def initialize
 		super
 
-		@length = FFI::MemoryPointer.new :uint
-
 		FFI.raise_if((@fd = C.port_create) < 0)
 		FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, @breaker.to_i, C::POLLIN, FFI::Pointer.new(C::MAX)) < 0)
+
+		@timeout = C::TimeSpec.new
+		@length  = FFI::MemoryPointer.new :uint
 
 		self.size = 4096
 	end
@@ -124,7 +125,7 @@ class Port < Lanterna; begin
 		super.tap {|l|
 			begin
 				FFI.raise_if(C.port_dissociate(@fd, C::SOURCE_FD, l.to_i) < 0)
-			rescue Errno::ENOENT; end
+			rescue Errno::EIDRM; end
 
 			@last = nil
 		}
@@ -139,26 +140,16 @@ class Port < Lanterna; begin
 	def readable (timeout = nil)
 		set :read; port timeout
 
-		if report_errors?
-			[to(:read), to(:error)]
-		else
-			to :read
-		end
+		report_errors? ? [to(:read), to(:error)] : to(:read)
 	end
 
 	def writable (timeout = nil)
 		set :write; port timeout
 
-		if report_errors?
-			[to(:write), to(:error)]
-		else
-			to :write
-		end
+		report_errors? ? [to(:write), to(:error)] : to(:write)
 	end
 
 	def set (what)
-		return if @last == what
-
 		events = case what
 			when :both  then C::POLLIN | C::POLLOUT
 			when :read  then C::POLLIN
@@ -168,8 +159,6 @@ class Port < Lanterna; begin
 		each_with_index {|descriptor, index|
 			FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, descriptor.to_i, events, FFI::Pointer.new(index)) < 0)
 		}
-
-		@last = what
 	end
 
 	def to (what)
@@ -181,7 +170,10 @@ class Port < Lanterna; begin
 		end
 
 		0.upto(@length.read_uint - 1) {|n|
-			p     = C::PortEvent.new(@events + (n * C::PortEvent.size))
+			p = C::PortEvent.new(@events + (n * C::PortEvent.size))
+
+			next unless p[:source] == C::SOURCE_FD
+
 			index = p[:user].address
 
 			if index != C::MAX && (p[:events] & events).nonzero?
@@ -194,15 +186,15 @@ class Port < Lanterna; begin
 
 	def port (timeout = nil)
 		if timeout
-			timeout = C::TimeSpec.new.tap {|t|
-				t[:tv_sec]  = timeout.to_i
-				t[:tv_nsec] = (timeout - timeout.to_i) * 1000
-			}
+			@timeout[:tv_sec]  = timeout.to_i
+			@timeout[:tv_nsec] = (timeout - timeout.to_i) * 1000
 		end
 
-		FFI.raise_if(C.port_getn(@fd, @events, size, @length, timeout) < 0)
+		@length.write_uint 1
 
-		@breaker.flush
+		if C.port_getn(@fd, @events, size, @length, timeout ? @timeout : nil) < 0
+			FFI.raise_unless FFI.errno == Errno::ETIME::Errno
+		end
 	end
 rescue Exception
 	def self.supported?
