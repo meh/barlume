@@ -109,6 +109,8 @@ class Kqueue < Lanterna; begin
 			FFI.raise
 		end
 
+		@timeout = C::TimeSpec.new
+
 		self.size = 4096
 	end
 
@@ -247,13 +249,11 @@ class Kqueue < Lanterna; begin
 
 	def kevent (timeout = nil)
 		if timeout
-			timeout = C::TimeSpec.new.tap {|t|
-				t[:tv_sec]  = timeout.to_i
-				t[:tv_nsec] = (timeout - timeout.to_i) * 1000
-			}
+			@timeout[:tv_sec]  = timeout.to_i
+			@timeout[:tv_nsec] = (timeout - timeout.to_i) * 1000
 		end
 
-		FFI.raise_if((@length = C.kevent(@fd, nil, 0, @events, size, timeout)) < 0)
+		FFI.raise_if((@length = C.kevent(@fd, nil, 0, @events, size, timeout ? @timeout : nil)) < 0)
 
 		@breaker.flush
 	end
