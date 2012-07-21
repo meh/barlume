@@ -97,7 +97,6 @@ class Port < Lanterna; begin
 		super
 
 		FFI.raise_if((@fd = C.port_create) < 0)
-		FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, @breaker.to_i, C::POLLIN, FFI::Pointer.new(C::MAX)) < 0)
 
 		@timeout = C::TimeSpec.new
 		@length  = FFI::MemoryPointer.new :uint
@@ -111,24 +110,6 @@ class Port < Lanterna; begin
 
 	def size= (n)
 		@events = FFI::MemoryPointer.new C::PortEvent.size, n
-	end
-
-	def add (what)
-		super.tap {|l|
-			FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, l.to_i, 0, nil) < 0)
-
-			@last = nil
-		}
-	end
-
-	def remove (what)
-		super.tap {|l|
-			begin
-				FFI.raise_if(C.port_dissociate(@fd, C::SOURCE_FD, l.to_i) < 0)
-			rescue Errno::EIDRM; end
-
-			@last = nil
-		}
 	end
 
 	def available (timeout = nil)
@@ -192,9 +173,13 @@ class Port < Lanterna; begin
 
 		@length.write_uint 1
 
+		FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, @breaker.to_i, C::POLLIN, FFI::Pointer.new(C::MAX)) < 0)
+
 		if C.port_getn(@fd, @events, size, @length, timeout ? @timeout : nil) < 0
 			FFI.raise_unless FFI.errno == Errno::ETIME::Errno
 		end
+
+		@breaker.flush
 	end
 rescue Exception
 	def self.supported?
