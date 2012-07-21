@@ -23,7 +23,7 @@ module Barlume
 
 class Lanterna
 	class << self
-		%w[select poll epoll kqueue].each {|name|
+		%w[select poll epoll kqueue port].each {|name|
 			define_method "#{name}?" do
 				const_get(name.capitalize).supported?
 			end
@@ -37,6 +37,8 @@ class Lanterna
 			return kqueue if kqueue?
 
 			return epoll if epoll?
+			
+			return port if port?
 
 			return poll if poll?
 
@@ -160,3 +162,4 @@ require 'barlume/lanterna/select'
 require 'barlume/lanterna/poll'
 require 'barlume/lanterna/epoll'
 require 'barlume/lanterna/kqueue'
+require 'barlume/lanterna/port'
