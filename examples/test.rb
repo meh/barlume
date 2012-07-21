@@ -1,6 +1,5 @@
 #! /usr/bin/env ruby
 require 'barlume'
-require 'socket'
 
 lantern = Barlume::Lanterna.best
 server  = TCPServer.new 43215
