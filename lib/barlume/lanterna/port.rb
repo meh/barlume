@@ -19,7 +19,7 @@
 
 module Barlume; class Lanterna
 
-class Epoll < Lanterna; begin
+class Port < Lanterna; begin
 	module C
 		extend FFI::Library
 
@@ -47,7 +47,7 @@ class Epoll < Lanterna; begin
 		attach_function :port_sendn, [:pointer, :pointer, :uint, :int, :pointer], :int
 		attach_function :port_get, [:int, :pointer, :pointer], :int
 		attach_function :port_getn, [:int, :pointer, :uint, :pointer, :pointer], :int
-		attach_function :port_alter, [:int, :int, :int, :pointer], :int
+		attach_function :port_alert, [:int, :int, :int, :pointer], :int
 
 		MAX = 4294967295
 
@@ -175,9 +175,9 @@ class Epoll < Lanterna; begin
 	def to (what)
 		result = []
 		events = case what
-			when :read  then C::EPOLLIN
-			when :write then C::EPOLLOUT
-			when :error then C::EPOLLERR | C::EPOLLHUP
+			when :read  then C::POLLIN
+			when :write then C::POLLOUT
+			when :error then C::POLLERR | C::POLLHUP
 		end
 
 		0.upto(@length.read_uint - 1) {|n|
@@ -204,10 +204,7 @@ class Epoll < Lanterna; begin
 
 		@breaker.flush
 	end
-rescue Exception => e
-	$stderr.puts e.message
-	$stderr.puts e.backtrace
-
+rescue Exception
 	def self.supported?
 		false
 	end
