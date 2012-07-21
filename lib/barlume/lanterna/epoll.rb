@@ -153,21 +153,13 @@ class Epoll < Lanterna; begin
 	def readable (timeout = nil)
 		set :read; epoll timeout
 
-		if report_errors?
-			[to(:read), to(:error)]
-		else
-			to :read
-		end
+		report_errors? ? [to(:read), to(:error)] : to(:read)
 	end
 
 	def writable (timeout = nil)
 		set :write; epoll timeout
 
-		if report_errors?
-			[to(:write), to(:error)]
-		else
-			to :write
-		end
+		report_errors? ? [to(:write), to(:error)] : to(:write)
 	end
 
 	def set (what)
