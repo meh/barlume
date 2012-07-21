@@ -126,7 +126,9 @@ class Lanterna
 
 	def add (what)
 		Lucciola.wrap(what).tap {|l|
-			return false if @descriptors.member?(l)
+			if @descriptors.member?(l)
+				raise ArgumentError, "#{what.inspect} is already in the Lanterna"
+			end
 
 			@descriptors.push(l)
 		}
@@ -141,7 +143,11 @@ class Lanterna
 	alias << push
 
 	def remove (what)
-		@descriptors.delete(Lucciola.wrap(what))
+		unless result = @descriptors.delete(Lucciola.wrap(what))
+			raise ArgumentError, "#{what.inspect} isn't in the Lanterna"
+		end
+
+		result
 	end
 
 	alias delete remove

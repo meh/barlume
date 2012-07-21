@@ -75,6 +75,14 @@ class Lucciola
 		@closed or @io.respond_to?(:closed?) ? @io.closed? : false
 	end
 
+	def alive?
+		if @io.is_a?(Socket)
+			!!@io.getsockopt(Socket::SOL_SOCKET, Socket::SO_TYPE).nonzero?
+		else
+			!@io.closed?
+		end
+	end
+
 	def nonblocking?
 		(@io.fcntl(Fcntl::F_GETFL, 0) & Fcntl::O_NONBLOCK).nonzero?
 	end
@@ -143,6 +151,18 @@ class Lucciola
 		end
 
 		self
+	end
+
+	def read (*args)
+		if (result = sysread(*args)).nil?
+			@closed = true
+		end
+
+		result
+	end
+
+	def write (*args)
+		syswrite(*args)
 	end
 
 	def to_io

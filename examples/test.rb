@@ -17,7 +17,9 @@ loop do
 				clients.push(lantern.add(client))
 			}
 		else
-			puts lucciola.readline rescue nil
+			begin
+				puts lucciola.read(2048)
+			rescue EOFError; end
 
 			if lucciola.closed?
 				clients.delete(lantern.remove(lucciola))

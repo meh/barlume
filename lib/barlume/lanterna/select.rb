@@ -24,20 +24,8 @@ class Select < Lanterna
 		true
 	end
 
-	def add (*)
-		super.tap {
-			@descriptors_with_breaker = nil
-		}
-	end
-
-	def remove (*)
-		super.tap {
-			@descriptors_with_breaker = nil
-		}
-	end
-
 	def available (timeout = nil)
-		readable, writable, error = IO.select(descriptors_with_breaker, @descriptors, @descriptors, timeout)
+		readable, writable, error = IO.select([@breaker.to_io] + @descriptors, @descriptors, @descriptors, timeout)
 
 		if readable && readable.delete(@breaker.to_io)
 			@breaker.flush
@@ -47,7 +35,7 @@ class Select < Lanterna
 	end
 
 	def readable (timeout = nil)
-		readable, writable, error = IO.select(descriptors_with_breaker, nil, @descriptors, timeout)
+		readable, _, error = IO.select([@breaker.to_io] + @descriptors, nil, @descriptors, timeout)
 
 		if readable && readable.delete(@breaker.to_io)
 			@breaker.flush
@@ -61,7 +49,7 @@ class Select < Lanterna
 	end
 
 	def writable (timeout = nil)
-		readable, writable, error = IO.select([@breaker], @descriptors, @descriptors, timeout)
+		readable, writable, error = IO.select([@breaker.to_io], @descriptors, @descriptors, timeout)
 
 		if readable && readable.delete(@breaker.to_io)
 			@breaker.flush
@@ -72,11 +60,6 @@ class Select < Lanterna
 		else
 			writable || []
 		end
-	end
-
-private
-	def descriptors_with_breaker
-		@descriptors_with_breaker ||= [@breaker.to_io] + @descriptors
 	end
 end
 

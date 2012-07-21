@@ -72,8 +72,6 @@ class Poll < Lanterna; begin
 
 	def add (what)
 		super.tap {|l|
-			next unless l
-
 			@set.autorelease = false
 			@set = FFI::AutoPointer.new(C.realloc(@set, (@descriptors.length + 1) * C::PollFD.size), C.method(:free))
 
