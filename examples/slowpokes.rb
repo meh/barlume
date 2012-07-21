@@ -1,6 +1,6 @@
 #! /usr/bin/env ruby
 # encoding: utf-8
-require 'socket'
+require 'rubygems'
 require 'barlume'
 require 'optparse'
 
