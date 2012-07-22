@@ -14,5 +14,5 @@ Gem::Specification.new {|s|
 	s.test_files    = `git ls-files -- {test,spec,features}/*`.split("\n")
 	s.require_paths = ['lib']
 
-	s.add_dependency 'ffi'
+	s.add_runtime_dependency 'ffi'
 }
