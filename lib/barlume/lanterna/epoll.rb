@@ -147,19 +147,35 @@ class Epoll < Lanterna; begin
 	def available (timeout = nil)
 		set :both; epoll timeout
 
-		Available.new(to(:read), to(:write), to(:error))
+		return Available.new(to(:read), to(:write), to(:error), timeout?) if as_object?
+
+		return if timeout?
+
+		return to(:read), to(:write), to(:error)
 	end
 
 	def readable (timeout = nil)
 		set :read; epoll timeout
 
-		report_errors? ? [to(:read), to(:error)] : to(:read)
+		return Available.new(to(:read), nil, to(:error), timeout?) if as_object?
+
+		return if timeout?
+
+		return to(:read), to(:error) if report_errors?
+
+		return to(:read)
 	end
 
 	def writable (timeout = nil)
 		set :write; epoll timeout
 
-		report_errors? ? [to(:write), to(:error)] : to(:write)
+		return Available.new(nil, to(:write), to(:error), timeout?) if as_object?
+
+		return if timeout?
+
+		return to(:write), to(:error) if report_errors?
+
+		return to(:write)
 	end
 
 	def set (what)
@@ -185,6 +201,9 @@ class Epoll < Lanterna; begin
 
 	def to (what)
 		result = []
+
+		return result if timeout?
+
 		events = case what
 			when :read  then C::EPOLLIN
 			when :write then C::EPOLLOUT
@@ -201,6 +220,12 @@ class Epoll < Lanterna; begin
 
 		result
 	end
+
+	def timeout?
+		@length == 0
+	end
+
+	private :timeout?
 
 	def epoll (timeout = nil)
 		FFI.raise_if((@length = C.epoll_wait(@fd, @events, size, timeout ? timeout * 1000 : -1)) < 0)

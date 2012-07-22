@@ -127,19 +127,35 @@ class DPoll < Lanterna; begin
 	def available (timeout = nil)
 		set :both; dpoll timeout
 
-		Available.new(to(:read), to(:write), to(:error))
+		return Available.new(to(:read), to(:write), to(:error), timeout?) if as_object?
+
+		return if timeout?
+
+		return to(:read), to(:write), to(:error)
 	end
 
 	def readable (timeout = nil)
 		set :read; dpoll timeout
 
-		report_errors? ? [to(:read), to(:error)] : to(:read)
+		return Available.new(to(:read), nil, to(:error), timeout?) if as_object?
+
+		return if timeout?
+
+		return to(:read), to(:error) if report_errors?
+
+		return to(:read)
 	end
 
 	def writable (timeout = nil)
 		set :write; dpoll timeout
 
-		report_errors? ? [to(:write), to(:error)] : to(:write)
+		return Available.new(nil, to(:write), to(:error), timeout?) if as_object?
+
+		return if timeout?
+
+		return to(:write), to(:error) if report_errors?
+
+		return to(:write)
 	end
 
 	def set (what)
@@ -161,6 +177,9 @@ class DPoll < Lanterna; begin
 
 	def to (what)
 		result = []
+
+		return result if timeout?
+
 		events = case what
 			when :read  then C::POLLIN
 			when :write then C::POLLOUT
@@ -179,6 +198,12 @@ class DPoll < Lanterna; begin
 
 		result
 	end
+
+	def timeout?
+		@length == 0
+	end
+	
+	private :timeout?
 
 	def dpoll (timeout = nil)
 		@out[:timeout] = timeout ? timeout * 1000 : -1

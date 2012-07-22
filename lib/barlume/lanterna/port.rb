@@ -132,19 +132,35 @@ class Port < Lanterna; begin
 	def available (timeout = nil)
 		set :both; port timeout
 
-		Available.new(to(:read), to(:write), to(:error))
+		return Available.new(to(:read), to(:write), to(:error), timeout?) if as_object?
+
+		return if timeout?
+
+		return to(:read), to(:write), to(:error)
 	end
 
 	def readable (timeout = nil)
 		set :read; port timeout
 
-		report_errors? ? [to(:read), to(:error)] : to(:read)
+		return Available.new(to(:read), nil, to(:error), timeout?) if as_object?
+
+		return if timeout?
+
+		return to(:read), to(:error) if report_errors?
+
+		return to(:read)
 	end
 
 	def writable (timeout = nil)
 		set :write; port timeout
 
-		report_errors? ? [to(:write), to(:error)] : to(:write)
+		return Available.new(nil, to(:write), to(:error), timeout?) if as_object?
+
+		return if timeout?
+
+		return to(:write), to(:error) if report_errors?
+
+		return to(:write)
 	end
 
 	def set (what)
@@ -165,6 +181,9 @@ class Port < Lanterna; begin
 
 	def to (what)
 		result = []
+
+		return result if timeout?
+
 		events = case what
 			when :read  then C::POLLIN
 			when :write then C::POLLOUT
@@ -206,6 +225,12 @@ class Port < Lanterna; begin
 		}
 	end
 
+	def timeout?
+		@timeout
+	end
+
+	private :timeout?
+
 	def port (timeout = nil)
 		if timeout
 			@timeout[:tv_sec]  = timeout.to_i
@@ -216,11 +241,15 @@ class Port < Lanterna; begin
 
 		if C.port_getn(@fd, @events, size, @length, timeout ? @timeout : nil) < 0
 			FFI.raise_unless FFI.errno == Errno::ETIME::Errno
+
+			@timeout = true
+		else
+			@timeout = false
+
+			reassociate!
+
+			@breaker.flush
 		end
-
-		reassociate!
-
-		@breaker.flush
 	end
 rescue Exception
 	def self.supported?

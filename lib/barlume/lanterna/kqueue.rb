@@ -162,19 +162,35 @@ class Kqueue < Lanterna; begin
 	def available (timeout = nil)
 		set :both; kevent timeout
 
-		Available.new(to(:read), to(:write), to(:error))
+		return Available.new(to(:read), to(:write), to(:error), timeout?) if as_object?
+
+		return if timeout?
+
+		return to(:read), to(:write), to(:error)
 	end
 
 	def readable (timeout = nil)
 		set :read; kevent timeout
 
-		report_errors? ? [to(:read), to(:error)] : to(:read)
+		return Available.new(to(:read), nil, to(:error), timeout?) if as_object?
+
+		return if timeout?
+
+		return to(:read), to(:error) if report_errors?
+
+		return to(:read)
 	end
 
 	def writable (timeout = nil)
 		set :write; kevent timeout
 
-		report_errors? ? [to(:write), to(:error)] : to(:write)
+		return Available.new(nil, to(:write), to(:error), timeout?) if as_object?
+
+		return if timeout?
+
+		return to(:write), to(:error) if report_errors?
+
+		return to(:write)
 	end
 
 	def set (what)
@@ -222,12 +238,14 @@ class Kqueue < Lanterna; begin
 	def to (what)
 		result = []
 
+		return result if timeout?
+
 		if what == :error
 			0.upto(@length - 1) {|n|
 				p     = C::Kevent.new(@events + (n * C::Kevent.size))
 				index = p[:udata].address
 
-				if p != index && (p[:flags] & C::EV_ERROR).nonzero?
+				if index != C::MAX && (p[:flags] & C::EV_ERROR).nonzero?
 					result << @descriptors[index]
 				end
 			}
@@ -249,6 +267,12 @@ class Kqueue < Lanterna; begin
 
 		result
 	end
+
+	def timeout?
+		@length == 0
+	end
+
+	private :timeout?
 
 	def kevent (timeout = nil)
 		if timeout

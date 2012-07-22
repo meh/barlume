@@ -100,19 +100,35 @@ class Poll < Lanterna; begin
 	def available (timeout = nil)
 		set :both; poll timeout
 
-		Available.new(to(:read), to(:write), to(:error))
+		return Available.new(to(:read), to(:write), to(:error), timeout?) if as_object?
+
+		return if timeout?
+
+		return to(:read), to(:write), to(:error)
 	end
 
 	def readable (timeout = nil)
 		set :read; poll timeout
 
-		report_errors? ? [to(:read), to(:error)] : to(:read)
+		return Available.new(to(:read), nil, to(:error), timeout?) if as_object?
+
+		return if timeout?
+
+		return to(:read), to(:error) if report_errors?
+
+		return to(:read)
 	end
 
 	def writable (timeout = nil)
 		set :write; poll timeout
 
-		report_errors? ? [to(:write), to(:error)] : to(:write)
+		return Available.new(nil, to(:write), to(:error), timeout?) if as_object?
+
+		return if timeout?
+
+		return to(:write), to(:error) if report_errors?
+
+		return to(:write)
 	end
 
 	def set (what)
@@ -134,6 +150,9 @@ class Poll < Lanterna; begin
 
 	def to (what)
 		result = []
+
+		return result if timeout?
+
 		events = case what
 			when :read  then C::POLLIN
 			when :write then C::POLLOUT
@@ -151,8 +170,14 @@ class Poll < Lanterna; begin
 		result
 	end
 
+	def timeout?
+		@length == 0
+	end
+
+	private :timeout?
+
 	def poll (timeout = nil)
-		FFI.raise_if(C.poll(@set, @descriptors.length + 1, timeout ? timeout * 1000 : -1) < 0)
+		FFI.raise_if((@length = C.poll(@set, @descriptors.length + 1, timeout ? timeout * 1000 : -1)) < 0)
 
 		@breaker.flush
 	end

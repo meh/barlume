@@ -72,7 +72,21 @@ class Lanterna
 		end
 	end
 
-	Available = Struct.new(:readable, :writable, :error)
+	class Available
+		attr_reader :readable, :writable, :error
+
+		def initialize (readable = nil, writable = nil, error = nil, timeout = false)
+			@readable = readable || []
+			@writable = writable || []
+			@error    = error    || []
+
+			@timeout = timeout
+		end
+
+		def timeout?
+			@timeout
+		end
+	end
 
 	class Breaker
 		def initialize
@@ -102,6 +116,7 @@ class Lanterna
 		@breaker       = Breaker.new
 		@descriptors   = []
 		@report_errors = false
+		@as_object     = false
 	end
 
 	def name
@@ -128,6 +143,20 @@ class Lanterna
 
 	def dont_report_errors!
 		@report_errors = false
+
+		self
+	end
+
+	def as_object?; @as_object; end
+
+	def as_object!
+		@as_object = true
+
+		self
+	end
+
+	def as_array!
+		@as_object = false
 
 		self
 	end
