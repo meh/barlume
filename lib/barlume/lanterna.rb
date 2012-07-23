@@ -32,7 +32,7 @@ module Barlume
 class Lanterna
 	class << self
 		%w[select poll epoll kqueue port dpoll].each {|name|
-			klass = Lanterna.const_get(constants.find { |c| c.downcase.to_s == name })
+			klass = Lanterna.const_get(Lanterna.constants.find { |c| c.downcase.to_s == name })
 
 			define_method "#{name}?" do
 				klass.supported?
