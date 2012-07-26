@@ -30,46 +30,222 @@ require 'barlume/lanterna/dpoll'
 module Barlume
 
 class Lanterna
-	class << self
-		%w[select poll epoll kqueue port dpoll].each {|name|
-			klass = Lanterna.const_get(Lanterna.constants.find { |c| c.downcase.to_s == name })
+	%w[select poll epoll kqueue port dpoll].each {|name|
+		klass = Lanterna.const_get(Lanterna.constants.find { |c| c.downcase.to_s == name })
 
-			define_method "#{name}?" do
-				klass.supported?
+		define_singleton_method "#{name}?" do
+			klass.supported?
+		end
+
+		define_singleton_method name do
+			klass.new
+		end
+	}
+
+	def self.best
+		return kqueue if kqueue?
+
+		return epoll if epoll?
+		
+		return port if port?
+
+		return dpoll if dpoll? && RUBY_PLATFORM =~ /solaris/i
+
+		return poll if poll?
+
+		return select
+	end
+
+	def self.best_edge_triggered
+		return kqueue.edge_triggered! if kqueue?
+
+		return epoll.edge_triggered! if epoll?
+
+		raise 'edge triggering is not supported on this platform'
+	end
+
+	def self.new (*)
+		raise 'unsupported platform' unless supported?
+
+		super
+	end
+
+	include Enumerable
+
+	def initialize
+		@breaker     = Breaker.new
+		@descriptors = {}
+		@readable    = {}
+		@writable    = {}
+	end
+
+	def name
+		self.class.name[/(?:::)?([^:]*)$/, 1].downcase.to_sym
+	end
+
+	def break
+		@breaker.break
+
+		self
+	end
+
+	def add (what, mode = nil, &block)
+		Lucciola.wrap(what).tap {|l|
+			if @descriptors.has_key?(l.to_i)
+				raise ArgumentError, "#{what.inspect} is already trapped"
 			end
 
-			define_method name do
-				klass.new
-			end
+			@descriptors[l.to_i] = l
+			l.trap_in self
+			block.call l if block
+
+			readable! what if mode == :readable || mode == :both
+			writable! what if mode == :writable || mode == :both
 		}
+	end
 
-		def best
-			return kqueue if kqueue?
+	def push (*args)
+		args.each { |a| add a }
 
-			return epoll if epoll?
-			
-			return port if port?
+		self
+	end
 
-			return dpoll if dpoll? && RUBY_PLATFORM =~ /solaris/i
+	alias << push
 
-			return poll if poll?
-
-			return select
+	def remove (what, &block)
+		unless what = @descriptors[what.to_i]
+			raise ArgumentError, "#{what.inspect} isn't trapped here"
 		end
 
-		def best_edge_triggered
-			return kqueue.edge_triggered! if kqueue?
+		block.call what if block
+		@descriptors.delete(what.to_i)
+		what.set_free
+	end
 
-			return epoll.edge_triggered! if epoll?
+	alias delete remove
 
-			raise 'edge triggering is not supported on this platform'
+	def has? (what)
+		@descriptors.has_key?(what.to_i)
+	end
+
+	def [] (what)
+		@descriptors[what.to_i]
+	end
+
+	def each (mode = nil, &block)
+		return enum_for :each, mode unless block
+
+		if mode.nil?
+			@descriptors.each_value(&block)
+		elsif mode == :readable
+			@readable.each_value(&block)
+		elsif mode == :writeable
+			@writable.each_value(&block)
+		else
+			raise ArgumentError, "#{mode} is an unknown mode"
 		end
 
-		def new (*)
-			raise 'unsupported platform' unless supported?
+		self
+	end
 
-			super
+	def readable (&block)
+		each(:readable, &block)
+	end
+
+	def readable! (*args, &block)
+		args.flatten!
+		args.compact!
+
+		if args.empty?
+			each { |c| readable! c, &block }
+		else
+			args.each {|what|
+				unless readable?(what)
+					what = self[what]
+
+					block.call what if block
+					@readable[what.to_i] = what
+				end
+			}
 		end
+
+		self
+	end
+
+	def no_readable! (*args, &block)
+		args.flatten!
+		args.compact!
+
+		if args.empty?
+			each { |c| readable! c, &block }
+		else
+			args.each {|what|
+				if what = readable?(what)
+					@readable.delete(what.to_i)
+					block.call what if block
+				end
+			}
+		end
+
+		self
+	end
+
+	def readable? (what = nil)
+		return !@readable.empty? unless what
+
+		return false unless what = @readable[what.to_i]
+
+		what
+	end
+
+	def writable (&block)
+		each(:writable, &block)
+	end
+
+	def writable! (*args, &block)
+		args.flatten!
+		args.compact!
+
+		if args.empty?
+			each { |c| writable! c, &block }
+		else
+			args.each {|what|
+				unless writable?(what)
+					what = self[what]
+
+					block.call what if block
+					@writable[what.to_i] = what
+				end
+			}
+		end
+
+		self
+	end
+
+	def no_writable! (*args, &block)
+		args.flatten!
+		args.compact!
+
+		if args.empty?
+			each { |c| writable! c, &block }
+		else
+			args.each {|what|
+				if what = writable?(what)
+					@writable.delete(what.to_i)
+					block.call what if block
+				end
+			}
+		end
+
+		self
+	end
+
+	def writable? (what = nil)
+		return !@writable.empty? unless what
+
+		return false unless what = @writable[what.to_i]
+
+		what
 	end
 
 	class Available
@@ -85,6 +261,10 @@ class Lanterna
 
 		def timeout?
 			@timeout
+		end
+
+		def to_a
+			[@readable, @writable, @error, @timeout]
 		end
 	end
 
@@ -109,91 +289,6 @@ class Lanterna
 			to_io.to_i
 		end
 	end
-
-	include Enumerable
-
-	def initialize
-		@breaker       = Breaker.new
-		@descriptors   = []
-		@report_errors = false
-		@as_object     = false
-	end
-
-	def name
-		self.class.name[/(?:::)?([^:]*)$/, 1].downcase.to_sym
-	end
-
-	def each (&block)
-		return to_enum unless block
-
-		@descriptors.each(&block)
-
-		self
-	end
-
-	def report_errors?
-		@report_errors
-	end
-
-	def report_errors!
-		@report_errors = true
-
-		self
-	end
-
-	def dont_report_errors!
-		@report_errors = false
-
-		self
-	end
-
-	def as_object?; @as_object; end
-
-	def as_object!
-		@as_object = true
-
-		self
-	end
-
-	def as_array!
-		@as_object = false
-
-		self
-	end
-
-	def break
-		@breaker.break
-
-		self
-	end
-
-	def add (what)
-		Lucciola.wrap(what).tap {|l|
-			if @descriptors.member?(l)
-				raise ArgumentError, "#{what.inspect} is already in the Lanterna"
-			end
-
-			@descriptors.push(l)
-		}
-	end
-
-	def push (*args)
-		args.each { |a| add a }
-
-		self
-	end
-
-	alias << push
-
-	def remove (what)
-		unless result = @descriptors.delete(Lucciola.wrap(what))
-			raise ArgumentError, "#{what.inspect} isn't in the Lanterna"
-		end
-
-		result
-	end
-
-	alias delete remove
 end
 
 end

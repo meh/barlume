@@ -45,13 +45,7 @@ class Lucciola
 
 	def method_missing (id, *args, &block)
 		if @io.respond_to? id
-			begin
-				return @io.__send__ id, *args, &block
-			rescue EOFError
-				@closed = true
-
-				raise
-			end
+			return @io.__send__ id, *args, &block
 		end
 
 		super
@@ -84,7 +78,7 @@ class Lucciola
 	end
 
 	def nonblocking?
-		(@io.fcntl(Fcntl::F_GETFL, 0) & Fcntl::O_NONBLOCK).nonzero?
+		!(@io.fcntl(Fcntl::F_GETFL, 0) & Fcntl::O_NONBLOCK).zero?
 	end
 
 	alias asynchronous? nonblocking?
@@ -96,7 +90,19 @@ class Lucciola
 	alias synchronous? blocking?
 
 	def blocking!
-		@io.fcntl(Fcntl::F_SETFL, @io.fcntl(Fcntl::F_GETFL, 0) | Fcntl::O_NONBLOCK)
+		if block_given?
+			was_nonblocking = nonblocking?
+
+			@io.fcntl(Fcntl::F_SETFL, @io.fcntl(Fcntl::F_GETFL, 0) & ~Fcntl::O_NONBLOCK)
+
+			begin
+				yield
+			ensure
+				nonblocking! if was_nonblocking
+			end
+		else
+			@io.fcntl(Fcntl::F_SETFL, @io.fcntl(Fcntl::F_GETFL, 0) & ~Fcntl::O_NONBLOCK)
+		end
 
 		self
 	end
@@ -104,7 +110,19 @@ class Lucciola
 	alias sychronous! blocking!
 
 	def nonblocking!
-		@io.fcntl(Fcntl::F_SETFL, @io.fcntl(Fcntl::F_GETFL, 0) & ~Fcntl::O_NONBLOCK)
+		if block_given?
+			was_blocking = blocking?
+
+			@io.fcntl(Fcntl::F_SETFL, @io.fcntl(Fcntl::F_GETFL, 0) | Fcntl::O_NONBLOCK)
+
+			begin
+				yield
+			ensure
+				blocking! if was_blocking
+			end
+		else
+			@io.fcntl(Fcntl::F_SETFL, @io.fcntl(Fcntl::F_GETFL, 0) | Fcntl::O_NONBLOCK)
+		end
 
 		self
 	end
@@ -153,16 +171,110 @@ class Lucciola
 		self
 	end
 
+	def trap_in (lanterna)
+		raise 'already trapped' if @lanterna
+
+		@lanterna = lanterna
+	end
+
+	def set_free
+		raise 'not trapped' unless @lanterna
+
+		if @lanterna.has?(self)
+			@lanterna.remove(self)
+		end
+
+		@lanterna = nil
+	end
+
+	def readable?
+		raise 'not trapped' unless @lanterna
+
+		@lanterna.readable? self
+	end
+
+	def readable!
+		raise 'not trapped' unless @lanterna
+
+		@lanterna.readable! self
+
+		self
+	end
+
+	def no_readable!
+		raise 'not trapped' unless @lanterna
+
+		@lanterna.no_readable! self
+
+		self
+	end
+
+	def writable?
+		raise 'not trapped' unless @lanterna
+
+		@lanterna.writable? self
+	end
+
+	def writable!
+		raise 'not trapped' unless @lanterna
+
+		@lanterna.writable! self
+
+		self
+	end
+
+	def no_writable!
+		raise 'not trapped' unless @lanterna
+
+		@lanterna.no_writable! self
+
+		self
+	end
+
+	def accept (*args)
+		@io.sysaccept(*args)
+	rescue EOFError
+		@closed = true
+
+		raise
+	end
+
+	def accept_nonblock (*args)
+		nonblocking! {
+			accept(*args)
+		}
+	end
+
 	def read (*args)
-		if (result = sysread(*args)).nil?
+		if (result = @io.sysread(*args)).nil?
 			@closed = true
 		end
 
 		result
+	rescue EOFError
+		@closed = true
+
+		raise
+	end
+
+	def read_nonblock (*args)
+		nonblocking! {
+			read(*args)
+		}
 	end
 
 	def write (*args)
-		syswrite(*args)
+		@io.syswrite(*args)
+	rescue EOFError
+		@closed = true
+
+		raise
+	end
+
+	def write_nonblock (*args)
+		nonblocking! {
+			write(*args)
+		}
 	end
 
 	def to_io

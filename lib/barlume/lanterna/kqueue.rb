@@ -44,8 +44,6 @@ class Kqueue < Lanterna; begin
 		attach_function :kqueue, [], :int
 		attach_function :kevent, [:int, :pointer, :int, :pointer, :int, :pointer], :int, :blocking => true
 
-		MAX = 4294967295
-
 		EVFILT_READ     =  -1
 		EVFILT_WRITE    =  -2
 		EVFILT_AIO      =  -3
@@ -105,11 +103,10 @@ class Kqueue < Lanterna; begin
 
 		FFI.raise_if((@fd = C.kqueue) < 0)
 
-		if C.kevent(@fd, C::EV_SET(C::Kevent.new, @breaker.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_ENABLE, 0, 0, FFI::Pointer.new(C::MAX)), 1, nil, 0, nil) < 0
-			FFI.raise
-		end
-
 		@timeout = C::TimeSpec.new
+		@ev      = C::Kevent.new
+
+		FFI.raise_if(C.kevent(@fd, C::EV_SET(@ev, @breaker.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_ENABLE, 0, 0, 0), 1, nil, 0, nil) < 0)
 
 		self.size = 4096
 	end
@@ -127,112 +124,72 @@ class Kqueue < Lanterna; begin
 
 	def edge_triggered!
 		@edge = true
-		@last = nil
 
-		self
+		each {|l|
+			if l.readable?
+				FFI.raise_if(C.kevent(@fd, C::EV_SET(@ev, l.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_ENABLE | C::EV_CLEAR, 0, 0, l.to_i), 1, nil, 0, nil) < 0)
+			end
+
+			if l.writable?
+				FFI.raise_if(C.kevent(@fd, C::EV_SET(@ev, l.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_ENABLE | C::EV_CLEAR, 0, 0, l.to_i), 1, nil, 0, nil) < 0)
+			end
+		}
 	end
 
 	def level_triggered!
 		@edge = false
-		@last = nil
 
-		self
-	end
+		each {|l|
+			if l.readable?
+				FFI.raise_if(C.kevent(@fd, C::EV_SET(@ev, l.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_ENABLE, 0, 0, l.to_i), 1, nil, 0, nil) < 0)
+			end
 
-	def add (*)
-		super.tap {
-			@last = nil
+			if l.writable?
+				FFI.raise_if(C.kevent(@fd, C::EV_SET(@ev, l.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_ENABLE, 0, 0, l.to_i), 1, nil, 0, nil) < 0)
+			end
 		}
 	end
 
-	def remove (what)
-		super.tap {|l|
+	def remove (*)
+		super {|l|
 			begin
-				FFI.raise_if(C.kevent(@fd, C::EV_SET(C::Kevent.new, what.to_i, C::EVFILT_READ, C::EV_DELETE | C::EV_DISABLE, 0, 0, 0), 1, nil, 0, nil) < 0)
+				FFI.raise_if(C.kevent(@fd, C::EV_SET(@ev, l.to_i, C::EVFILT_READ, C::EV_DELETE | C::EV_DISABLE, 0, 0, 0), 1, nil, 0, nil) < 0)
 			rescue Errno::ENOENT; end
 
 			begin
-				FFI.raise_if(C.kevent(@fd, C::EV_SET(C::Kevent.new, what.to_i, C::EVFILT_WRITE, C::EV_DELETE | C::EV_DISABLE, 0, 0, 0), 1, nil, 0, nil) < 0)
+				FFI.raise_if(C.kevent(@fd, C::EV_SET(@ev, l.to_i, C::EVFILT_WRITE, C::EV_DELETE | C::EV_DISABLE, 0, 0, 0), 1, nil, 0, nil) < 0)
 			rescue Errno::ENOENT; end
-
-			@last = nil
 		}
 	end
 
 	def available (timeout = nil)
-		set :both; kevent timeout
+		kevent timeout
 
-		return Available.new(to(:read), to(:write), to(:error), timeout?) if as_object?
-
-		return if timeout?
-
-		return to(:read), to(:write), to(:error)
+		Available.new(to(:read), to(:write), to(:error), timeout?)
 	end
 
-	def readable (timeout = nil)
-		set :read; kevent timeout
-
-		return Available.new(to(:read), nil, to(:error), timeout?) if as_object?
-
-		return if timeout?
-
-		return to(:read), to(:error) if report_errors?
-
-		return to(:read)
+	def readable! (*)
+		super {|l|
+			FFI.raise_if(C.kevent(@fd, C::EV_SET(@ev, l.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, 0), 1, nil, 0, nil) < 0)
+		}
 	end
 
-	def writable (timeout = nil)
-		set :write; kevent timeout
-
-		return Available.new(nil, to(:write), to(:error), timeout?) if as_object?
-
-		return if timeout?
-
-		return to(:write), to(:error) if report_errors?
-
-		return to(:write)
+	def no_readable! (*)
+		super {|l|
+			FFI.raise_if(C.kevent(@fd, C::EV_SET(@ev, l.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_DISABLE, 0, 0, 0), 1, nil, 0, nil) < 0)
+		}
 	end
 
-	def set (what)
-		return if @last == what
+	def writable! (*)
+		super {|l|
+			FFI.raise_if(C.kevent(@fd, C::EV_SET(@ev, l.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, 0), 1, nil, 0, nil) < 0)
+		}
+	end
 
-		ev = C::Kevent.new
-
-		if what == :read
-			each_with_index {|descriptor, index|
-				index = FFI::Pointer.new(index)
-
-				unless @last == :both
-					FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
-				end
-
-				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_DISABLE, 0, 0, index), 1, nil, 0, nil) < 0)
-			}
-		elsif what == :write
-			each_with_index {|descriptor, index|
-				index = FFI::Pointer.new(index)
-
-				unless @last == :both
-					FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
-				end
-
-				FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_DISABLE, 0, 0, index), 1, nil, 0, nil) < 0)
-			}
-		else
-			each_with_index {|descriptor, index|
-				index = FFI::Pointer.new(index)
-
-				unless @last == :write
-					FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
-				end
-
-				unless @last == :read
-					FFI.raise_if(C.kevent(@fd, C::EV_SET(ev, descriptor.to_i, C::EVFILT_READ, C::EV_ADD | C::EV_ENABLE | (edge_triggered? ? C::EV_CLEAR : 0), 0, 0, index), 1, nil, 0, nil) < 0)
-				end
-			}
-		end
-
-		@last = what
+	def no_writable! (*)
+		super {|l|
+			FFI.raise_if(C.kevent(@fd, C::EV_SET(@ev, l.to_i, C::EVFILT_WRITE, C::EV_ADD | C::EV_DISABLE, 0, 0, 0), 1, nil, 0, nil) < 0)
+		}
 	end
 
 	def to (what)
@@ -242,11 +199,10 @@ class Kqueue < Lanterna; begin
 
 		if what == :error
 			0.upto(@length - 1) {|n|
-				p     = C::Kevent.new(@events + (n * C::Kevent.size))
-				index = p[:udata].address
+				p = C::Kevent.new(@events + (n * C::Kevent.size))
 
-				if index != C::MAX && (p[:flags] & C::EV_ERROR).nonzero?
-					result << @descriptors[index]
+				if (p[:flags] & C::EV_ERROR).nonzero? && lucciola = self[p[:ident]]
+					result << lucciola
 				end
 			}
 		else
@@ -256,11 +212,10 @@ class Kqueue < Lanterna; begin
 			end
 
 			0.upto(@length - 1) {|n|
-				p     = C::Kevent.new(@events + (n * C::Kevent.size))
-				index = p[:udata].address
+				p = C::Kevent.new(@events + (n * C::Kevent.size))
 
-				if index != C::MAX && p[:filter] == filter
-					result << @descriptors[index]
+				if p[:filter] == filter && lucciola = self[p[:ident]]
+					result << lucciola
 				end
 			}
 		end

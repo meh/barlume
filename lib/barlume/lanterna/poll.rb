@@ -70,82 +70,61 @@ class Poll < Lanterna; begin
 		pfd[:events] = C::POLLIN
 	end
 
-	def add (what)
-		super.tap {|l|
+	def add (*)
+		super {|l|
 			@set.autorelease = false
 			@set = FFI::AutoPointer.new(C.realloc(@set, (@descriptors.length + 1) * C::PollFD.size), C.method(:free))
 
-			pfd = C::PollFD.new(@set + @descriptors.length * C::PollFD.size)
+			pfd = C::PollFD.new(@set + (@descriptors.length * C::PollFD.size))
 			pfd[:fd] = l.to_i
-
-			@last = nil
 		}
 	end
 
-	def remove (what)
-		Lucciola.wrap(what).tap {|l|
-			index   = @descriptors.index(l)
+	def remove (*)
+		super {|l|
+			index   = index_of(l)
 			offset  = (index + 1) * C::PollFD.size
 			pointer = @set + offset
 
 			pointer.write_bytes((pointer + C::PollFD.size).read_bytes((@descriptors.length - index) * C::PollFD.size))
 
 			@set.autorelease = false
-			@set = FFI::AutoPointer.new(C.realloc(@set, (@descriptors.length) * C::PollFD.size), C.method(:free))
-
-			super(l)
+			@set = FFI::AutoPointer.new(C.realloc(@set, @descriptors.length * C::PollFD.size), C.method(:free))
 		}
 	end
 
 	def available (timeout = nil)
-		set :both; poll timeout
+		poll timeout
 
-		return Available.new(to(:read), to(:write), to(:error), timeout?) if as_object?
-
-		return if timeout?
-
-		return to(:read), to(:write), to(:error)
+		Available.new(to(:read), to(:write), to(:error), timeout?)
 	end
 
-	def readable (timeout = nil)
-		set :read; poll timeout
-
-		return Available.new(to(:read), nil, to(:error), timeout?) if as_object?
-
-		return if timeout?
-
-		return to(:read), to(:error) if report_errors?
-
-		return to(:read)
-	end
-
-	def writable (timeout = nil)
-		set :write; poll timeout
-
-		return Available.new(nil, to(:write), to(:error), timeout?) if as_object?
-
-		return if timeout?
-
-		return to(:write), to(:error) if report_errors?
-
-		return to(:write)
-	end
-
-	def set (what)
-		return if @last == what
-
-		events = case what
-			when :both  then C::POLLIN | C::POLLOUT
-			when :read  then C::POLLIN
-			when :write then C::POLLOUT
-		end
-
-		1.upto(@descriptors.length) {|n|
-			pfd = C::PollFD.new(@set + (n * C::PollFD.size))
-			pfd[:events] = events
+	def readable! (*)
+		super {|l|
+			pfd = C::PollFD.new(@set + ((index_of(l) + 1) * C::PollFD.size))
+			pfd[:events] |= C::POLLIN
 		}
+	end
 
-		@last = what
+	def no_readable! (*)
+		super {|l|
+			pfd = C::PollFD.new(@set + ((index_of(l) + 1) * C::PollFD.size))
+			pfd[:events] &= ~C::POLLIN
+		}
+	end
+
+	def writable! (*)
+		super {|l|
+			pfd = C::PollFD.new(@set + ((index_of(l) + 1) * C::PollFD.size))
+			pfd[:events] |= C::POLLOUT
+		}
+	end
+
+	def no_writable! (*)
+		super {|l|
+			pfd = C::PollFD.new(@set + ((index_of(l) + 1) * C::PollFD.size))
+			pfd[:events] &= ~C::POLLOUT
+		}
 	end
 
 	def to (what)
@@ -162,13 +141,21 @@ class Poll < Lanterna; begin
 		1.upto(@descriptors.length) {|n|
 			pfd = C::PollFD.new(@set + (n * C::PollFD.size))
 
+			next if pfd[:fd] == @breaker.to_i
+
 			if (pfd[:revents] & events).nonzero?
-				result << @descriptors[n - 1]
+				result << self[pfd[:fd]]
 			end
 		}
 
 		result
 	end
+
+	def index_of (what)
+		@descriptors.keys.index(what.to_i)
+	end
+
+	private :index_of
 
 	def timeout?
 		@length == 0
@@ -181,6 +168,7 @@ class Poll < Lanterna; begin
 
 		@breaker.flush
 	end
+
 rescue Exception
 	def self.supported?
 		false

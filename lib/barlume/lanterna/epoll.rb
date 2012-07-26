@@ -48,8 +48,6 @@ class Epoll < Lanterna; begin
 		attach_function :epoll_ctl, [:int, Control, :int, :pointer], :int
 		attach_function :epoll_wait, [:int, :pointer, :int, :int], :int, :blocking => true
 
-		MAX = 4294967295
-
 		EPOLLIN  = 0x001
 		EPOLLPRI = 0x002
 		EPOLLOUT = 0x004
@@ -92,11 +90,11 @@ class Epoll < Lanterna; begin
 
 		FFI.raise_if((@fd = C.epoll_create1(0)) < 0)
 
-		p = C::EpollEvent.new
-		p[:events] = C::EPOLLIN
-		p[:data][:u32] = C::MAX
+		@ev = C::EpollEvent.new
+		@ev[:events]    = C::EPOLLIN
+		@ev[:data][:fd] = @breaker.to_i
 
-		FFI.raise_if(C.epoll_ctl(@fd, :add, @breaker.to_i, p) < 0)
+		FFI.raise_if(C.epoll_ctl(@fd, :add, @breaker.to_i, @ev) < 0)
 
 		self.size = 4096
 	end
@@ -114,89 +112,83 @@ class Epoll < Lanterna; begin
 
 	def edge_triggered!
 		@edge = true
-		@last = nil
 
-		self
+		each {|l|
+			@ev[:events]    = C::EPOLLET | (l.readable? ? C::EPOLLIN : 0) | (l.writable? ? C::EPOLLOUT : 0)
+			@ev[:data][:fd] = l.to_i
+
+			FFI.raise_if(C.epoll_ctl(@fd, :mod, l.to_i, @ev) < 0)
+		}
 	end
 
 	def level_triggered!
 		@edge = false
-		@last = nil
 
-		self
-	end
+		each {|l|
+			@ev[:events]    = (l.readable? ? C::EPOLLIN : 0) | (l.writable? ? C::EPOLLOUT : 0)
+			@ev[:data][:fd] = l.to_i
 
-	def add (what)
-		super.tap {|l|
-			FFI.raise_if(C.epoll_ctl(@fd, :add, l.to_i, C::EpollEvent.new) < 0)
-
-			@last = nil
+			FFI.raise_if(C.epoll_ctl(@fd, :mod, l.to_i, @ev) < 0)
 		}
 	end
 
-	def remove (what)
-		super.tap {|l|
+	def add (*)
+		super {|l|
+			@ev[:events]    = 0
+			@ev[:data][:fd] = l.to_i
+
+			FFI.raise_if(C.epoll_ctl(@fd, :add, l.to_i, @ev) < 0)
+		}
+	end
+
+	def remove (*)
+		super {|l|
 			begin
 				FFI.raise_if(C.epoll_ctl(@fd, :del, l.to_i, nil) < 0)
 			rescue Errno::ENOENT; end
-
-			@last = nil
 		}
 	end
 
 	def available (timeout = nil)
-		set :both; epoll timeout
+		epoll timeout
 
-		return Available.new(to(:read), to(:write), to(:error), timeout?) if as_object?
-
-		return if timeout?
-
-		return to(:read), to(:write), to(:error)
+		Available.new(to(:read), to(:write), to(:error), timeout?)
 	end
 
-	def readable (timeout = nil)
-		set :read; epoll timeout
+	def readable! (*)
+		super {|l|
+			@ev[:events]    = C::EPOLLIN | (l.writable? ? C::EPOLLOUT : 0) | (edge_triggered? ? C::EPOLLET : 0)
+			@ev[:data][:fd] = l.to_i
 
-		return Available.new(to(:read), nil, to(:error), timeout?) if as_object?
-
-		return if timeout?
-
-		return to(:read), to(:error) if report_errors?
-
-		return to(:read)
-	end
-
-	def writable (timeout = nil)
-		set :write; epoll timeout
-
-		return Available.new(nil, to(:write), to(:error), timeout?) if as_object?
-
-		return if timeout?
-
-		return to(:write), to(:error) if report_errors?
-
-		return to(:write)
-	end
-
-	def set (what)
-		return if @last == what
-
-		p = C::EpollEvent.new
-		p[:events] = case what
-			when :both  then C::EPOLLIN | C::EPOLLOUT
-			when :read  then C::EPOLLIN
-			when :write then C::EPOLLOUT
-		end
-
-		p[:events] |= C::EPOLLET if edge_triggered?
-
-		each_with_index {|descriptor, index|
-			p[:data][:u32] = index
-
-			FFI.raise_if(C.epoll_ctl(@fd, :mod, descriptor.to_i, p) < 0)
+			FFI.raise_if(C.epoll_ctl(@fd, :mod, l.to_i, @ev) < 0)
 		}
+	end
 
-		@last = what
+	def no_readable! (*)
+		super {|l|
+			@ev[:events]    = (l.writable? ? C::EPOLLOUT : 0) | (edge_triggered? ? C::EPOLLET : 0)
+			@ev[:data][:fd] = l.to_i
+
+			FFI.raise_if(C.epoll_ctl(@fd, :mod, l.to_i, @ev) < 0)
+		}
+	end
+
+	def writable! (*)
+		super {|l|
+			@ev[:events]    = C::EPOLLOUT | (l.readable? ? C::EPOLLIN : 0) | (edge_triggered? ? C::EPOLLET : 0)
+			@ev[:data][:fd] = l.to_i
+
+			FFI.raise_if(C.epoll_ctl(@fd, :mod, l.to_i, @ev) < 0)
+		}
+	end
+
+	def no_writable! (*)
+		super {|l|
+			@ev[:events]    = (l.readable? ? C::EPOLLIN : 0) | (edge_triggered? ? C::EPOLLET : 0)
+			@ev[:data][:fd] = l.to_i
+
+			FFI.raise_if(C.epoll_ctl(@fd, :mod, l.to_i, @ev) < 0)
+		}
 	end
 
 	def to (what)
@@ -213,8 +205,8 @@ class Epoll < Lanterna; begin
 		0.upto(@length - 1) {|n|
 			p = C::EpollEvent.new(@events + (n * C::EpollEvent.size))
 
-			if p[:data][:u32] != C::MAX && (p[:events] & events).nonzero?
-				result << @descriptors[p[:data][:u32]]
+			if (p[:events] & events).nonzero? && lucciola = self[p[:data][:fd]]
+				result << lucciola
 			end
 		}
 

@@ -25,49 +25,13 @@ class Select < Lanterna
 	end
 
 	def available (timeout = nil)
-		readable, writable, error = IO.select([@breaker.to_io] + @descriptors, @descriptors, @descriptors, timeout)
+		readable, writable, error = IO.select([@breaker.to_io] + @readable.values, @writable.values, @readable.values + @writable.values, timeout)
 
 		if readable && readable.delete(@breaker.to_io)
 			@breaker.flush
 		end
 
-		return Available.new(readable, writable, error, readable.nil?) if as_object?
-
-		return if readable.nil?
-
-		return readable || [], writable || [], error || []
-	end
-
-	def readable (timeout = nil)
-		readable, writable, error = IO.select([@breaker.to_io] + @descriptors, nil, @descriptors, timeout)
-
-		if readable && readable.delete(@breaker.to_io)
-			@breaker.flush
-		end
-
-		return Available.new(readable, writable, error, readable.nil?) if as_object?
-
-		return if readable.nil?
-
-		return readable || [], error || [] if report_errors?
-
-		return readable || []
-	end
-
-	def writable (timeout = nil)
-		readable, writable, error = IO.select([@breaker.to_io], @descriptors, @descriptors, timeout)
-
-		if readable && readable.delete(@breaker.to_io)
-			@breaker.flush
-		end
-
-		return Available.new(readable, writable, error, readable.nil?) if as_object?
-
-		return if readable.nil?
-
-		return writable || [], error || [] if report_errors?
-
-		return writable || []
+		Available.new(readable, writable, error, readable.nil?)
 	end
 end
 

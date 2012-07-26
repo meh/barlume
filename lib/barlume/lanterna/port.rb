@@ -49,8 +49,6 @@ class Port < Lanterna; begin
 		attach_function :port_getn, [:int, :pointer, :uint, :pointer, :pointer], :int
 		attach_function :port_alert, [:int, :int, :int, :pointer], :int
 
-		MAX = 4294967295
-
 		SOURCE_AIO   = 1
 		SOURCE_TIMER = 2
 		SOURCE_USER  = 3
@@ -97,7 +95,7 @@ class Port < Lanterna; begin
 		super
 
 		FFI.raise_if((@fd = C.port_create) < 0)
-		FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, @breaker.to_i, C::POLLIN, FFI::Pointer.new(C::MAX)) < 0)
+		FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, @breaker.to_i, C::POLLIN, nil) < 0)
 
 		@timeout = C::TimeSpec.new
 		@length  = FFI::MemoryPointer.new :uint
@@ -114,69 +112,47 @@ class Port < Lanterna; begin
 	end
 
 	def add (*)
-		super.tap {
-			@last = nil
+		super {|l|
+			FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, l.to_i, C::POLLIN, nil) < 0)
 		}
 	end
 
 	def remove (*)
-		super.tap {|l|
+		super {|l|
 			begin
 				FFI.raise_if(C.port_dissociate(@fd, C::SOURCE_FD, l.to_i) < 0)
 			rescue Errno::EIDRM; end
-
-			@last = nil
 		}
 	end
 
 	def available (timeout = nil)
-		set :both; port timeout
+		port timeout
 
-		return Available.new(to(:read), to(:write), to(:error), timeout?) if as_object?
-
-		return if timeout?
-
-		return to(:read), to(:write), to(:error)
+		Available.new(to(:read), to(:write), to(:error), timeout?)
 	end
 
-	def readable (timeout = nil)
-		set :read; port timeout
-
-		return Available.new(to(:read), nil, to(:error), timeout?) if as_object?
-
-		return if timeout?
-
-		return to(:read), to(:error) if report_errors?
-
-		return to(:read)
-	end
-
-	def writable (timeout = nil)
-		set :write; port timeout
-
-		return Available.new(nil, to(:write), to(:error), timeout?) if as_object?
-
-		return if timeout?
-
-		return to(:write), to(:error) if report_errors?
-
-		return to(:write)
-	end
-
-	def set (what)
-		return if @last == what
-
-		events = case what
-			when :both  then C::POLLIN | C::POLLOUT
-			when :read  then C::POLLIN
-			when :write then C::POLLOUT
-		end
-
-		each_with_index {|descriptor, index|
-			FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, descriptor.to_i, events, FFI::Pointer.new(index)) < 0)
+	def readable! (*)
+		super {|l|
+			FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, l.to_i, C::POLLIN | (l.writable? ? C::POLLOUT : 0), nil) < 0)
 		}
+	end
 
-		@last = what
+	def no_readable! (*)
+		super {|l|
+			FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, l.to_i, (l.writable? ? C::POLLOUT : 0), nil) < 0)
+		}
+	end
+
+	def writable! (*)
+		super {|l|
+			FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, l.to_i, C::POLLOUT | (l.readable? ? C::POLLIN : 0), nil) < 0)
+		}
+	end
+
+	def no_writable! (*)
+		super {|l|
+			FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, l.to_i, (l.readable? ? C::POLLIN : 0), nil) < 0)
+		}
 	end
 
 	def to (what)
@@ -191,13 +167,12 @@ class Port < Lanterna; begin
 		end
 
 		0.upto(@length.read_uint - 1) {|n|
-			p     = C::PortEvent.new(@events + (n * C::PortEvent.size))
-			index = p[:user].address
+			p = C::PortEvent.new(@events + (n * C::PortEvent.size))
 
-			next unless p[:source] == C::SOURCE_FD
+			next unless p[:source] == C::SOURCE_FD || p[:object] == @breaker.to_i
 
-			if index != C::MAX && (p[:events] & events).nonzero?
-				result << @descriptors[index]
+			if (p[:events] & events).nonzero? && lucciola = self[p[:object]]
+				result << lucciola
 			end
 		}
 
@@ -205,28 +180,21 @@ class Port < Lanterna; begin
 	end
 
 	def reassociate!
-		events = case @last
-			when :both  then C::POLLIN | C::POLLOUT
-			when :read  then C::POLLIN
-			when :write then C::POLLOUT
-		end
-
 		0.upto(@length.read_uint - 1) {|n|
-			p     = C::PortEvent.new(@events + (n * C::PortEvent.size))
-			index = p[:user].address
+			p = C::PortEvent.new(@events + (n * C::PortEvent.size))
 
 			next unless p[:source] == C::SOURCE_FD
 
-			if index == C::MAX
-				FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, @breaker.to_i, C::POLLIN, FFI::Pointer.new(C::MAX)) < 0)
+			if lucciola = self[p[:object]]
+				FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, lucciola.to_i, (lucciola.readable? ? C::POLLIN : 0) | (lucciola.writable? ? C::POLLOUT : 0), nil) < 0)
 			else
-				FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, p[:object], events, p[:user]) < 0)
+				FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, @breaker.to_i, C::POLLIN, nil) < 0)
 			end
 		}
 	end
 
 	def timeout?
-		@timeout
+		@timedout
 	end
 
 	private :timeout?
@@ -242,9 +210,9 @@ class Port < Lanterna; begin
 		if C.port_getn(@fd, @events, size, @length, timeout ? @timeout : nil) < 0
 			FFI.raise_unless FFI.errno == Errno::ETIME::Errno
 
-			@timeout = true
+			@timedout = true
 		else
-			@timeout = false
+			@timedout = false
 
 			reassociate!
 
