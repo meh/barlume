@@ -61,7 +61,7 @@ class Lanterna
 
 		return epoll.edge_triggered! if epoll?
 
-		raise 'edge triggering is not supported on this platform'
+		raise 'this platform does not support edge triggered primitives'
 	end
 
 	def self.new (*)
