@@ -91,12 +91,12 @@ class Lucciola
 
 	def blocking!
 		if block_given?
-			was_nonblocking = nonblocking?
-
-			@io.fcntl(Fcntl::F_SETFL, @io.fcntl(Fcntl::F_GETFL, 0) & ~Fcntl::O_NONBLOCK)
+			if was_nonblocking = nonblocking?
+				@io.fcntl(Fcntl::F_SETFL, @io.fcntl(Fcntl::F_GETFL, 0) & ~Fcntl::O_NONBLOCK)
+			end
 
 			begin
-				yield
+				return yield
 			ensure
 				nonblocking! if was_nonblocking
 			end
@@ -111,12 +111,12 @@ class Lucciola
 
 	def nonblocking!
 		if block_given?
-			was_blocking = blocking?
-
-			@io.fcntl(Fcntl::F_SETFL, @io.fcntl(Fcntl::F_GETFL, 0) | Fcntl::O_NONBLOCK)
+			if was_blocking = blocking?
+				@io.fcntl(Fcntl::F_SETFL, @io.fcntl(Fcntl::F_GETFL, 0) | Fcntl::O_NONBLOCK)
+			end
 
 			begin
-				yield
+				return yield
 			ensure
 				blocking! if was_blocking
 			end
@@ -232,15 +232,21 @@ class Lucciola
 	end
 
 	def accept (*args)
-		@io.sysaccept(*args)
-	rescue EOFError
-		@closed = true
-
-		raise
+		if blocking?
+			@io.accept(*args)
+		else
+			@io.accept_nonblock(*args)
+		end
 	end
 
 	def accept_nonblock (*args)
 		nonblocking! {
+			accept(*args)
+		}
+	end
+
+	def accept_block (*args)
+		blocking! {
 			accept(*args)
 		}
 	end
@@ -263,6 +269,12 @@ class Lucciola
 		}
 	end
 
+	def read_block (*args)
+		blocking! {
+			read(*args)
+		}
+	end
+
 	def write (*args)
 		@io.syswrite(*args)
 	rescue EOFError
@@ -273,6 +285,12 @@ class Lucciola
 
 	def write_nonblock (*args)
 		nonblocking! {
+			write(*args)
+		}
+	end
+
+	def write_block (*args)
+		blocking! {
 			write(*args)
 		}
 	end

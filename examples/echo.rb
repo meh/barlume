@@ -2,7 +2,7 @@
 require 'rubygems'
 require 'barlume'
 
-lanterna = Barlume::Lanterna.dpoll
+lanterna = Barlume::Lanterna.select
 server   = lanterna.add(TCPServer.new(43215)).asynchronous!.readable!
 
 puts "Using #{lanterna.name}..."
@@ -76,7 +76,7 @@ loop do
 
 	writable.each {|echo|
 		if echo.write_all
-			lanterna.no_writable! echo
+			echo.no_writable!
 		end
 	}
 end
