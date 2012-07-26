@@ -2,7 +2,7 @@
 require 'rubygems'
 require 'barlume'
 
-lanterna = Barlume::Lanterna.select
+lanterna = Barlume::Lanterna.best
 server   = lanterna.add(TCPServer.new(43215)).asynchronous!.readable!
 
 puts "Using #{lanterna.name}..."
