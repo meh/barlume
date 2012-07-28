@@ -91,6 +91,8 @@ class Port < Lanterna; begin
 		}
 	end
 
+	attr_reader :size
+
 	def initialize
 		super
 
@@ -103,12 +105,9 @@ class Port < Lanterna; begin
 		self.size = 4096
 	end
 
-	def size
-		@events.size / C::PortEvent.size
-	end
-
 	def size= (n)
 		@events = FFI::MemoryPointer.new C::PortEvent.size, n
+		@size   = @events.size / C::PortEvent.size
 	end
 
 	def add (*)
@@ -123,12 +122,6 @@ class Port < Lanterna; begin
 				FFI.raise_if(C.port_dissociate(@fd, C::SOURCE_FD, l.to_i) < 0)
 			rescue Errno::EIDRM; end
 		}
-	end
-
-	def available (timeout = nil)
-		port timeout
-
-		Available.new(to(:read), to(:write), to(:error), timeout?)
 	end
 
 	def readable! (*)
@@ -155,51 +148,9 @@ class Port < Lanterna; begin
 		}
 	end
 
-	def to (what)
-		result = []
+	def available (timeout = nil, &block)
+		return enum_for :available, timeout unless block
 
-		return result if timeout?
-
-		events = case what
-			when :read  then C::POLLIN
-			when :write then C::POLLOUT
-			when :error then C::POLLERR | C::POLLHUP
-		end
-
-		0.upto(@length.read_uint - 1) {|n|
-			p = C::PortEvent.new(@events + (n * C::PortEvent.size))
-
-			next unless p[:source] == C::SOURCE_FD || p[:object] == @breaker.to_i
-
-			if (p[:events] & events).nonzero? && lucciola = self[p[:object]]
-				result << lucciola
-			end
-		}
-
-		result
-	end
-
-	def reassociate!
-		0.upto(@length.read_uint - 1) {|n|
-			p = C::PortEvent.new(@events + (n * C::PortEvent.size))
-
-			next unless p[:source] == C::SOURCE_FD
-
-			if lucciola = self[p[:object]]
-				FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, lucciola.to_i, (lucciola.readable? ? C::POLLIN : 0) | (lucciola.writable? ? C::POLLOUT : 0), nil) < 0)
-			else
-				FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, @breaker.to_i, C::POLLIN, nil) < 0)
-			end
-		}
-	end
-
-	def timeout?
-		@timedout
-	end
-
-	private :timeout?
-
-	def port (timeout = nil)
 		if timeout
 			@timeout[:tv_sec]  = timeout.to_i
 			@timeout[:tv_nsec] = (timeout - timeout.to_i) * 1000
@@ -210,14 +161,46 @@ class Port < Lanterna; begin
 		if C.port_getn(@fd, @events, size, @length, timeout ? @timeout : nil) < 0
 			FFI.raise_unless FFI.errno == Errno::ETIME::Errno
 
-			@timedout = true
-		else
-			@timedout = false
+			yield :timeout, timeout
 
-			reassociate!
-
-			@breaker.flush
+			return self
 		end
+
+		n      = 0
+		size   = C::PortEvent.size
+		length = @length.read_uint
+		while n < length
+			p        = C::PortEvent.new(@events + (n * size))
+			events   = p[:events]
+			fd       = p[:object]
+			lucciola = self[fd]
+
+			if lucciola
+				FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, lucciola.to_i, (lucciola.readable? ? C::POLLIN : 0) | (lucciola.writable? ? C::POLLOUT : 0), nil) < 0)
+
+				if (events & (C::POLLERR | C::POLLHUP)).nonzero?
+					yield :error, lucciola
+				else
+					if (events & C::POLLIN).nonzero?
+						yield :readable, lucciola
+					end
+
+					if (events & C::POLLOUT).nonzero?
+						yield :writable, lucciola
+					end
+				end
+			elsif fd == @breaker.to_i
+				FFI.raise_if(C.port_associate(@fd, C::SOURCE_FD, @breaker.to_i, C::POLLIN, nil) < 0)
+
+				yield :break, @breaker.reason
+			else
+				raise "#{fd} isn't trapped here"
+			end
+
+			n += 1
+		end
+
+		self
 	end
 rescue Exception
 	def self.supported?

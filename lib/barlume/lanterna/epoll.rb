@@ -85,6 +85,8 @@ class Epoll < Lanterna; begin
 		}
 	end
 
+	attr_reader :size
+
 	def initialize
 		super
 
@@ -99,12 +101,9 @@ class Epoll < Lanterna; begin
 		self.size = 4096
 	end
 
-	def size
-		@events.size / C::EpollEvent.size
-	end
-
 	def size= (n)
 		@events = FFI::MemoryPointer.new C::EpollEvent.size, n
+		@size   = @events.size / C::EpollEvent.size
 	end
 
 	def edge_triggered?;   @edge; end
@@ -149,12 +148,6 @@ class Epoll < Lanterna; begin
 		}
 	end
 
-	def available (timeout = nil)
-		epoll timeout
-
-		Available.new(to(:read), to(:write), to(:error), timeout?)
-	end
-
 	def readable! (*)
 		super {|l|
 			@ev[:events]    = C::EPOLLIN | (l.writable? ? C::EPOLLOUT : 0) | (edge_triggered? ? C::EPOLLET : 0)
@@ -191,38 +184,47 @@ class Epoll < Lanterna; begin
 		}
 	end
 
-	def to (what)
-		result = []
+	def available (timeout = nil, &block)
+		return enum_for :available, timeout unless block
 
-		return result if timeout?
+		FFI.raise_if((length = C.epoll_wait(@fd, @events, @size, timeout ? timeout * 1000 : -1)) < 0)
 
-		events = case what
-			when :read  then C::EPOLLIN
-			when :write then C::EPOLLOUT
-			when :error then C::EPOLLERR | C::EPOLLHUP
+		if length == 0
+			yield :timeout, timeout
+
+			return self
 		end
 
-		0.upto(@length - 1) {|n|
-			p = C::EpollEvent.new(@events + (n * C::EpollEvent.size))
+		n    = 0
+		size = C::EpollEvent.size
+		while n < length
+			p        = C::EpollEvent.new(@events + (n * size))
+			events   = p[:events]
+			fd       = p[:data][:fd]
+			lucciola = self[fd]
 
-			if (p[:events] & events).nonzero? && lucciola = self[p[:data][:fd]]
-				result << lucciola
+			if lucciola
+				if (events & (C::EPOLLERR | C::EPOLLHUP)).nonzero?
+					yield :error, lucciola
+				else
+					if (events & C::EPOLLIN).nonzero?
+						yield :readable, lucciola
+					end
+
+					if (events & C::EPOLLOUT).nonzero?
+						yield :writable, lucciola
+					end
+				end
+			elsif fd == @breaker.to_i
+				yield :break, @breaker.reason
+			else
+				raise "#{fd} isn't trapped here"
 			end
-		}
 
-		result
-	end
+			n += 1
+		end
 
-	def timeout?
-		@length == 0
-	end
-
-	private :timeout?
-
-	def epoll (timeout = nil)
-		FFI.raise_if((@length = C.epoll_wait(@fd, @events, size, timeout ? timeout * 1000 : -1)) < 0)
-
-		@breaker.flush
+		self
 	end
 rescue Exception
 	def self.supported?

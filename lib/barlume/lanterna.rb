@@ -83,24 +83,24 @@ class Lanterna
 		self.class.name[/(?:::)?([^:]*)$/, 1].downcase.to_sym
 	end
 
-	def break
-		@breaker.break
+	def break (with = nil)
+		@breaker.break(with)
 
 		self
 	end
 
 	def add (what, mode = nil, &block)
-		Lucciola.wrap(what).tap {|l|
-			if @descriptors.has_key?(l.to_i)
+		Lucciola.wrap(what).tap {|lucciola|
+			if @descriptors.has_key?(lucciola.to_i)
 				raise ArgumentError, "#{what.inspect} is already trapped"
 			end
 
-			@descriptors[l.to_i] = l
-			l.trap_in self
-			block.call l if block
+			@descriptors[lucciola.to_i] = lucciola
+			lucciola.trap_in self
+			block.call lucciola if block
 
-			readable! what if mode == :readable || mode == :both
-			writable! what if mode == :writable || mode == :both
+			readable! lucciola if mode == :readable || mode == :both
+			writable! lucciola if mode == :writable || mode == :both
 		}
 	end
 
@@ -113,13 +113,17 @@ class Lanterna
 	alias << push
 
 	def remove (what, &block)
-		unless what = @descriptors[what.to_i]
+		unless lucciola = @descriptors[what.to_i]
 			raise ArgumentError, "#{what.inspect} isn't trapped here"
 		end
 
-		block.call what if block
-		@descriptors.delete(what.to_i)
-		what.set_free
+		block.call lucciola if block
+
+		@descriptors.delete(lucciola.to_i)
+		@readable.delete(lucciola.to_i)
+		@writable.delete(lucciola.to_i)
+
+		lucciola.set_free
 	end
 
 	alias delete remove
@@ -139,7 +143,7 @@ class Lanterna
 			@descriptors.each_value(&block)
 		elsif mode == :readable
 			@readable.each_value(&block)
-		elsif mode == :writeable
+		elsif mode == :writable
 			@writable.each_value(&block)
 		else
 			raise ArgumentError, "#{mode} is an unknown mode"
@@ -273,12 +277,12 @@ class Lanterna
 			@pipes = IO.pipe
 		end
 
-		def break
-			@pipes.last.write_nonblock 'x'
+		def break (with = nil)
+			@pipes.last.write(Marshal.dump(with))
 		end
 
-		def flush
-			@pipes.first.read_nonblock 2048 rescue nil
+		def reason
+			Marshal.load(@pipes.first)
 		end
 
 		def to_io

@@ -114,12 +114,6 @@ class DPoll < Lanterna; begin
 		}
 	end
 
-	def available (timeout = nil)
-		dpoll timeout
-
-		Available.new(to(:read), to(:write), to(:error), timeout?)
-	end
-
 	def readable! (*)
 		super {|l|
 			pfd = C::PollFD.new(@set + ((index_of(l) + 1) * C::PollFD.size))
@@ -148,51 +142,58 @@ class DPoll < Lanterna; begin
 		}
 	end
 
-	def to (what)
-		result = []
+	def available (timeout = nil, &block)
+		return enum_for :available, timeout unless block
 
-		return result if timeout?
-
-		events = case what
-			when :read  then C::POLLIN
-			when :write then C::POLLOUT
-			when :error then C::POLLERR | C::POLLHUP
-		end
-
-		0.upto(@length - 1) {|n|
-			pfd = C::PollFD.new(@out[:fds] + (n * C::PollFD.size))
-
-			next if pfd[:fd] == @breaker.to_i
-
-			if (pfd[:revents] & events).nonzero?
-				result << self[pfd[:fd]]
-			end
-		}
-
-		result
-	end
-
-	def index_of (what)
-		@descriptors.keys.index(what.to_i)
-	end
-
-	private :index_of
-
-	def timeout?
-		@length == 0
-	end
-	
-	private :timeout?
-
-	def dpoll (timeout = nil)
 		@out[:timeout] = timeout ? timeout * 1000 : -1
 
 		io = IO.for_fd(IO.sysopen('/dev/poll', IO::RDWR))
 		io.syswrite(@set.read_bytes((@descriptors.length + 1) * C::PollFD.size))
 
-		@length = io.ioctl(C::DP_POLL, @out.pointer.address)
+		length = io.ioctl(C::DP_POLL, @out.pointer.address)
+		io.close
 
-		@breaker.flush
+		if length == 0
+			yield :timeout, timeout
+
+			return self
+		end
+
+		n    = 0
+		size = C::PollFD.size
+		while n < length
+			p        = C::PollFD.new(@out[:fds] + (n * size))
+			events   = p[:revents]
+			fd       = p[:fd]
+			lucciola = self[fd]
+
+			if lucciola
+				if (events & (C::POLLERR | C::POLLHUP)).nonzero?
+					yield :error, lucciola
+				else
+					if (events & C::POLLIN).nonzero?
+						yield :readable, lucciola
+					end
+
+					if (events & C::POLLOUT).nonzero?
+						yield :writable, lucciola
+					end
+				end
+			elsif fd == @breaker.to_i
+				yield :break, @breaker.reason
+			else
+				raise "#{fd} isn't trapped here"
+			end
+
+			n += 1
+		end
+
+		self
+	end
+
+private
+	def index_of (what)
+		@descriptors.keys.index(what.to_i)
 	end
 rescue Exception
 	def self.supported?

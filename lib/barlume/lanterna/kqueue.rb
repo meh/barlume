@@ -98,6 +98,8 @@ class Kqueue < Lanterna; begin
 		}
 	end
 
+	attr_reader :size
+
 	def initialize
 		super
 
@@ -111,12 +113,9 @@ class Kqueue < Lanterna; begin
 		self.size = 4096
 	end
 
-	def size
-		@events.size / C::Kevent.size
-	end
-
 	def size= (n)
 		@events = FFI::MemoryPointer.new C::Kevent.size, n
+		@size   = @events.size / C::Kevent.size
 	end
 
 	def edge_triggered?;   @edge; end
@@ -154,18 +153,12 @@ class Kqueue < Lanterna; begin
 		super {|l|
 			begin
 				FFI.raise_if(C.kevent(@fd, C::EV_SET(@ev, l.to_i, C::EVFILT_READ, C::EV_DELETE | C::EV_DISABLE, 0, 0, 0), 1, nil, 0, nil) < 0)
-			rescue Errno::ENOENT; end
+			rescue Errno::ENOENT, Errno::ENOTDIR; end
 
 			begin
 				FFI.raise_if(C.kevent(@fd, C::EV_SET(@ev, l.to_i, C::EVFILT_WRITE, C::EV_DELETE | C::EV_DISABLE, 0, 0, 0), 1, nil, 0, nil) < 0)
-			rescue Errno::ENOENT; end
+			rescue Errno::ENOENT, Errno::ENOTDIR; end
 		}
-	end
-
-	def available (timeout = nil)
-		kevent timeout
-
-		Available.new(to(:read), to(:write), to(:error), timeout?)
 	end
 
 	def readable! (*)
@@ -192,52 +185,47 @@ class Kqueue < Lanterna; begin
 		}
 	end
 
-	def to (what)
-		result = []
+	def available (timeout = nil, &block)
+		return enum_for :available, timeout unless block
 
-		return result if timeout?
-
-		if what == :error
-			0.upto(@length - 1) {|n|
-				p = C::Kevent.new(@events + (n * C::Kevent.size))
-
-				if (p[:flags] & C::EV_ERROR).nonzero? && lucciola = self[p[:ident]]
-					result << lucciola
-				end
-			}
-		else
-			filter = case what
-				when :read  then C::EVFILT_READ
-				when :write then C::EVFILT_WRITE
-			end
-
-			0.upto(@length - 1) {|n|
-				p = C::Kevent.new(@events + (n * C::Kevent.size))
-
-				if p[:filter] == filter && lucciola = self[p[:ident]]
-					result << lucciola
-				end
-			}
-		end
-
-		result
-	end
-
-	def timeout?
-		@length == 0
-	end
-
-	private :timeout?
-
-	def kevent (timeout = nil)
 		if timeout
 			@timeout[:tv_sec]  = timeout.to_i
 			@timeout[:tv_nsec] = (timeout - timeout.to_i) * 1000
 		end
 
-		FFI.raise_if((@length = C.kevent(@fd, nil, 0, @events, size, timeout ? @timeout : nil)) < 0)
+		FFI.raise_if((length = C.kevent(@fd, nil, 0, @events, size, timeout ? @timeout : nil)) < 0)
 
-		@breaker.flush
+		if length == 0
+			yield :timeout, timeout
+
+			return self
+		end
+
+		n    = 0
+		size = C::Kevent.size
+		while n < length
+			p        = C::Kevent.new(@events + (n * size))
+			fd       = p[:ident]
+			lucciola = self[fd]
+
+			if lucciola
+				if (p[:flags] & C::EV_ERROR).nonzero?
+					yield :error, lucciola
+				elsif p[:filter] == C::EVFILT_READ
+					yield :readable, lucciola
+				elsif p[:filter] == C::EVFILT_WRITE
+					yield :writable, lucciola
+				end
+			elsif fd == @breaker.to_i
+				yield :break, @breaker.reason
+			else
+				raise "#{fd} isn't trapped here"
+			end
+
+			n += 1
+		end
+
+		self
 	end
 rescue Exception
 	def self.supported?

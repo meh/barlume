@@ -24,14 +24,37 @@ class Select < Lanterna
 		true
 	end
 
-	def available (timeout = nil)
-		readable, writable, error = IO.select([@breaker.to_io] + @readable.values, @writable.values, @readable.values + @writable.values, timeout)
+	def available (timeout = nil, &block)
+		return enum_for :available, timeout unless block
 
-		if readable && readable.delete(@breaker.to_io)
-			@breaker.flush
+		readable, writable, error = IO.select([@breaker.to_io] + @readable.values, @writable.values, @descriptors.values, timeout)
+
+		unless readable
+			yield :timeout, timeout
+
+			return self
 		end
 
-		Available.new(readable, writable, error, readable.nil?)
+		error.each {|io|
+			readable.delete(io)
+			writable.delete(io)
+
+			yield :error, io
+		}
+
+		readable.each {|io|
+			if io == @breaker.to_io
+				yield :break, @breaker.reason
+			else
+				yield :readable, io
+			end
+		}
+
+		writable.each {|io|
+			yield :writable, io
+		}
+
+		self
 	end
 end
 

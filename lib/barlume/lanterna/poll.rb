@@ -93,12 +93,6 @@ class Poll < Lanterna; begin
 		}
 	end
 
-	def available (timeout = nil)
-		poll timeout
-
-		Available.new(to(:read), to(:write), to(:error), timeout?)
-	end
-
 	def readable! (*)
 		super {|l|
 			pfd = C::PollFD.new(@set + ((index_of(l) + 1) * C::PollFD.size))
@@ -127,48 +121,54 @@ class Poll < Lanterna; begin
 		}
 	end
 
-	def to (what)
-		result = []
+	def available (timeout = nil, &block)
+		return enum_for :available, timeout unless block
 
-		return result if timeout?
+		FFI.raise_if((length = C.poll(@set, @descriptors.length + 1, timeout ? timeout * 1000 : -1)) < 0)
 
-		events = case what
-			when :read  then C::POLLIN
-			when :write then C::POLLOUT
-			when :error then C::POLLERR | C::POLLHUP
+		if length == 0
+			yield :timeout, timeout
+
+			return self
 		end
 
-		1.upto(@descriptors.length) {|n|
-			pfd = C::PollFD.new(@set + (n * C::PollFD.size))
+		if (C::PollFD.new(@set)[:revents] & C::POLLIN).nonzero?
+			yield :break, @breaker.reason
+		end
 
-			next if pfd[:fd] == @breaker.to_i
+		n      = 0
+		size   = C::PollFD.size
+		result = []
+		while n < @descriptors.length
+			p        = C::PollFD.new(@set + ((n + 1) * size))
+			events   = p[:revents]
+			fd       = p[:fd]
+			lucciola = self[fd]
 
-			if (pfd[:revents] & events).nonzero?
-				result << self[pfd[:fd]]
+			if (events & (C::POLLERR | C::POLLHUP)).nonzero?
+				result << [:error, lucciola]
+			else
+				if (events & C::POLLIN).nonzero?
+					result << [:readable, lucciola]
+				end
+
+				if (events & C::POLLOUT).nonzero?
+					result << [:writable, lucciola]
+				end
 			end
-		}
 
-		result
+			n += 1
+		end
+
+		result.each(&block)
+
+		self
 	end
 
+private
 	def index_of (what)
 		@descriptors.keys.index(what.to_i)
 	end
-
-	private :index_of
-
-	def timeout?
-		@length == 0
-	end
-
-	private :timeout?
-
-	def poll (timeout = nil)
-		FFI.raise_if((@length = C.poll(@set, @descriptors.length + 1, timeout ? timeout * 1000 : -1)) < 0)
-
-		@breaker.flush
-	end
-
 rescue Exception
 	def self.supported?
 		false

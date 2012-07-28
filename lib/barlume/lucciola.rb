@@ -231,6 +231,14 @@ class Lucciola
 		self
 	end
 
+	def delete!
+		raise 'not trapped' unless @lanterna
+
+		@lanterna.remove self
+
+		self
+	end
+
 	def accept (*args)
 		if blocking?
 			@io.accept(*args)
