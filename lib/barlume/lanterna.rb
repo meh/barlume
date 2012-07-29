@@ -152,8 +152,12 @@ class Lanterna
 		self
 	end
 
-	def readable (&block)
+	def each_readable (&block)
 		each(:readable, &block)
+	end
+
+	def each_writable (&block)
+		each(:writable, &block)
 	end
 
 	def readable! (*args, &block)
@@ -181,7 +185,7 @@ class Lanterna
 		args.compact!
 
 		if args.empty?
-			each { |c| readable! c, &block }
+			each(:readable) { |c| readable! c, &block }
 		else
 			args.each {|what|
 				if what = readable?(what)
@@ -200,10 +204,6 @@ class Lanterna
 		return false unless what = @readable[what.to_i]
 
 		what
-	end
-
-	def writable (&block)
-		each(:writable, &block)
 	end
 
 	def writable! (*args, &block)
@@ -231,7 +231,7 @@ class Lanterna
 		args.compact!
 
 		if args.empty?
-			each { |c| writable! c, &block }
+			each(:writable) { |c| writable! c, &block }
 		else
 			args.each {|what|
 				if what = writable?(what)
@@ -252,24 +252,38 @@ class Lanterna
 		what
 	end
 
-	class Available
-		attr_reader :readable, :writable, :error
+	def available (timeout = nil, &block)
+		raise NotImplementedError, 'available has not been implemented'
+	end
 
-		def initialize (readable = nil, writable = nil, error = nil, timeout = false)
-			@readable = readable || []
-			@writable = writable || []
-			@error    = error    || []
+	def readable (timeout = nil, &block)
+		readable = @readable.dup
+		writable = @writable.dup
 
-			@timeout = timeout
-		end
+		no_writable!
+		readable!
 
-		def timeout?
-			@timeout
-		end
+		result = available(timeout, &block)
 
-		def to_a
-			[@readable, @writable, @error, @timeout]
-		end
+		no_readable! @readable - readable
+		writable! writable
+
+		result
+	end
+
+	def writable (timeout = nil, &block)
+		readable = @readable.dup
+		writable = @writable.dup
+
+		no_readable!
+		writable!
+
+		result = available(timeout, &block)
+
+		no_writable! @writable - writable
+		readable! readable
+
+		result
 	end
 
 	class Breaker
