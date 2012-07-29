@@ -19,6 +19,6 @@
 
 module Barlume
 	def self.version
-		'0.0.1.rc.1'
+		'0.0.1.rc.2'
 	end
 end
