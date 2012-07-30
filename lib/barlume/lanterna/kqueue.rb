@@ -195,6 +195,8 @@ class Kqueue < Lanterna; begin
 
 		FFI.raise_if((length = C.kevent(@fd, nil, 0, @events, size, timeout ? @timeout : nil)) < 0)
 
+		yield :done
+
 		if length == 0
 			yield :timeout, timeout
 

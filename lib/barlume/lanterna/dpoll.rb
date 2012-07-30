@@ -153,6 +153,8 @@ class DPoll < Lanterna; begin
 		length = io.ioctl(C::DP_POLL, @out.pointer.address)
 		io.close
 
+		yield :done
+
 		if length == 0
 			yield :timeout, timeout
 

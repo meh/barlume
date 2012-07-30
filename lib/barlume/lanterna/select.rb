@@ -29,6 +29,8 @@ class Select < Lanterna
 
 		readable, writable, error = IO.select([@breaker.to_io] + @readable.values, @writable.values, @descriptors.values, timeout)
 
+		yield :done
+
 		unless readable
 			yield :timeout, timeout
 

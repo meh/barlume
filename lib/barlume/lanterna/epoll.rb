@@ -189,6 +189,8 @@ class Epoll < Lanterna; begin
 
 		FFI.raise_if((length = C.epoll_wait(@fd, @events, @size, timeout ? timeout * 1000 : -1)) < 0)
 
+		yield :done
+
 		if length == 0
 			yield :timeout, timeout
 

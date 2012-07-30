@@ -161,10 +161,13 @@ class Port < Lanterna; begin
 		if C.port_getn(@fd, @events, size, @length, timeout ? @timeout : nil) < 0
 			FFI.raise_unless FFI.errno == Errno::ETIME::Errno
 
+			yield :done
 			yield :timeout, timeout
 
 			return self
 		end
+
+		yield :done
 
 		n      = 0
 		size   = C::PortEvent.size

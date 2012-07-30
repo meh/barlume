@@ -126,6 +126,8 @@ class Poll < Lanterna; begin
 
 		FFI.raise_if((length = C.poll(@set, @descriptors.length + 1, timeout ? timeout * 1000 : -1)) < 0)
 
+		yield :done
+
 		if length == 0
 			yield :timeout, timeout
 
