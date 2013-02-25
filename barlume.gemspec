@@ -15,5 +15,4 @@ Gem::Specification.new {|s|
 	s.require_paths = ['lib']
 
 	s.add_runtime_dependency 'ffi'
-	s.add_runtime_dependency 'backports'
 }

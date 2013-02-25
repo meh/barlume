@@ -17,7 +17,6 @@
 # along with barlume. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-require 'backports'
 require 'ffi'
 
 module FFI
